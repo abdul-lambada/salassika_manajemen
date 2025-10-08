@@ -6,6 +6,24 @@
  * - Applies minimal security/session settings for production
  */
 
+// Polyfills for PHP < 8: str_starts_with, str_ends_with
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle)
+    {
+        if ($needle === '') { return true; }
+        return strncmp($haystack, $needle, strlen($needle)) === 0;
+    }
+}
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle)
+    {
+        if ($needle === '') { return true; }
+        $len = strlen($needle);
+        if ($len === 0) { return true; }
+        return substr($haystack, -$len) === $needle;
+    }
+}
+
 if (!function_exists('parse_env')) {
     function parse_env($path)
     {
