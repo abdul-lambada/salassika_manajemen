@@ -23,94 +23,104 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Validasi input tidak boleh kosong
     if (empty($username) || empty($password)) {
         $error = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
-                    <i class='fas fa-exclamation-triangle'></i> Username/UID dan password harus diisi.
                     <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
                   </div>";
         if (empty($username)) $usernameError = "is-invalid";
         if (empty($password)) $passwordError = "is-invalid";
     } else {
-        // Cari user berdasarkan username/name atau UID
-        $stmt = $conn->prepare("SELECT * FROM users WHERE name = :username OR uid = :username");
-        $stmt->bindParam(':username', $username);
-        $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        try {
+            // Cari user berdasarkan username/name atau UID
+            $stmt = $conn->prepare("SELECT * FROM users WHERE name = :username OR uid = :username");
+            $stmt->bindParam(':username', $username);
+            $stmt->execute();
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user && password_verify($password, $user['password'])) {
-            // Ambil data tambahan berdasarkan role
-            $additional_data = [];
-            
-            if ($user['role'] === 'guru') {
-                $stmt_guru = $conn->prepare("SELECT * FROM guru WHERE user_id = :user_id");
-                $stmt_guru->bindParam(':user_id', $user['id']);
-                $stmt_guru->execute();
-                $guru_data = $stmt_guru->fetch(PDO::FETCH_ASSOC);
+            if ($user && isset($user['password']) && password_verify($password, (string)$user['password'])) {
+                // Ambil data tambahan berdasarkan role
+                $additional_data = [];
                 
-                if ($guru_data) {
-                    $additional_data = [
-                        'id_guru' => $guru_data['id_guru'],
-                        'nip' => $guru_data['nip'],
-                        'nama_guru' => $guru_data['nama_guru']
-                    ];
+                if ($user['role'] === 'guru') {
+                    $stmt_guru = $conn->prepare("SELECT * FROM guru WHERE user_id = :user_id");
+                    $stmt_guru->bindParam(':user_id', $user['id']);
+                    $stmt_guru->execute();
+                    $guru_data = $stmt_guru->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($guru_data) {
+                        $additional_data = [
+                            'id_guru' => $guru_data['id_guru'],
+                            'nip' => $guru_data['nip'],
+                            'nama_guru' => $guru_data['nama_guru']
+                        ];
+                    }
+                } elseif ($user['role'] === 'siswa') {
+                    $stmt_siswa = $conn->prepare("SELECT * FROM siswa WHERE user_id = :user_id");
+                    $stmt_siswa->bindParam(':user_id', $user['id']);
+                    $stmt_siswa->execute();
+                    $siswa_data = $stmt_siswa->fetch(PDO::FETCH_ASSOC);
+                    
+                    if ($siswa_data) {
+                        $additional_data = [
+                            'id_siswa' => $siswa_data['id_siswa'],
+                            'nis' => $siswa_data['nis'],
+                            'nama_siswa' => $siswa_data['nama_siswa']
+                        ];
+                    }
                 }
-            } elseif ($user['role'] === 'siswa') {
-                $stmt_siswa = $conn->prepare("SELECT * FROM siswa WHERE user_id = :user_id");
-                $stmt_siswa->bindParam(':user_id', $user['id']);
-                $stmt_siswa->execute();
-                $siswa_data = $stmt_siswa->fetch(PDO::FETCH_ASSOC);
+
+                $_SESSION['user'] = [
+                    'id' => $user['id'],
+                    'name' => $user['name'],
+                    'role' => $user['role'],
+                    'uid' => $user['uid'],
+                    'avatar' => $user['avatar']
+                ];
+
+                // Gabungkan data tambahan ke session
+                $_SESSION['user'] = array_merge($_SESSION['user'], $additional_data);
+
+                // Redirect berdasarkan role - semua ke dashboard tunggal
+                if ($user['role'] === 'admin') {
+                    if (defined('APP_URL')) {
+                        header('Location: ' . APP_URL . '/admin/index.php');
+                    } else {
+                        header('Location: ../admin/index.php');
+                    }
+                } elseif ($user['role'] === 'guru') {
+                    if (defined('APP_URL')) {
+                        header('Location: ' . APP_URL . '/guru/index.php');
+                    } else {
+                        header('Location: ../guru/index.php');
+                    }
+                } else {
+                    // Siswa tidak bisa login ke sistem admin
+                    $error = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
+                                <i class='fas fa-ban'></i> Siswa tidak dapat mengakses sistem admin.
+                                <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
+                              </div>";
+                    $usernameError = "is-invalid";
+                    $passwordError = "is-invalid";
+                }
                 
-                if ($siswa_data) {
-                    $additional_data = [
-                        'id_siswa' => $siswa_data['id_siswa'],
-                        'nis' => $siswa_data['nis'],
-                        'nama_siswa' => $siswa_data['nama_siswa']
-                    ];
-                }
-            }
-
-            $_SESSION['user'] = [
-                'id' => $user['id'],
-                'name' => $user['name'],
-                'role' => $user['role'],
-                'uid' => $user['uid'],
-                'avatar' => $user['avatar']
-            ];
-
-            // Gabungkan data tambahan ke session
-            $_SESSION['user'] = array_merge($_SESSION['user'], $additional_data);
-
-            // Redirect berdasarkan role - semua ke dashboard tunggal
-            if ($user['role'] === 'admin') {
-                if (defined('APP_URL')) {
-                    header('Location: ' . APP_URL . '/admin/index.php');
-                } else {
-                    header('Location: ../admin/index.php');
-                }
-            } elseif ($user['role'] === 'guru') {
-                if (defined('APP_URL')) {
-                    header('Location: ' . APP_URL . '/guru/index.php');
-                } else {
-                    header('Location: ../guru/index.php');
+                if (empty($error)) {
+                    exit;
                 }
             } else {
-                // Siswa tidak bisa login ke sistem admin
-                $error = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
-                            <i class='fas fa-ban'></i> Siswa tidak dapat mengakses sistem admin.
+                $error = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
+                            <i class='fas fa-times-circle'></i> Username/UID atau password salah.
                             <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
                           </div>";
                 $usernameError = "is-invalid";
                 $passwordError = "is-invalid";
             }
-            
-            if (empty($error)) {
-                exit;
-            }
-        } else {
+        } catch (Throwable $ex) {
+            // Tulis log error agar tidak 500
+            $logDir = __DIR__ . '/../logs';
+            if (!is_dir($logDir)) { @mkdir($logDir, 0775, true); }
+            @file_put_contents($logDir . '/auth_login_error.log', date('c') . ' - ' . $ex->getMessage() . "\n" . $ex->getTraceAsString() . "\n\n", FILE_APPEND);
             $error = "<div class='alert alert-danger alert-dismissible fade show' role='alert'>
-                        <i class='fas fa-times-circle'></i> Username/UID atau password salah.
+                        <i class='fas fa-times-circle'></i> Terjadi kesalahan saat memproses login. Silakan coba lagi atau hubungi admin.
                         <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
                       </div>";
-            $usernameError = "is-invalid";
-            $passwordError = "is-invalid";
         }
     }
 }
