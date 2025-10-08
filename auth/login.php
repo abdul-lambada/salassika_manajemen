@@ -23,15 +23,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Validasi input tidak boleh kosong
     if (empty($username) || empty($password)) {
         $error = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
+                    <i class='fas fa-exclamation-triangle'></i> Username (kolom 'name') atau UID serta password harus diisi.
                     <button type='button' class='btn-close' data-bs-dismiss='alert' aria-label='Close'></button>
                   </div>";
         if (empty($username)) $usernameError = "is-invalid";
         if (empty($password)) $passwordError = "is-invalid";
     } else {
         try {
-            // Cari user berdasarkan username/name atau UID
-            $stmt = $conn->prepare("SELECT * FROM users WHERE name = :username OR uid = :username");
-            $stmt->bindParam(':username', $username);
+            // Cocokkan dengan kolom pada tabel users: name (case-insensitive) atau uid (exact)
+            $sql = "SELECT id, name, password, role, uid, avatar
+                    FROM users
+                    WHERE LOWER(name) = LOWER(:uname)
+                       OR uid = :uid";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':uname', $username);
+            $stmt->bindParam(':uid', $username);
             $stmt->execute();
             $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
