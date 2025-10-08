@@ -1,19 +1,34 @@
 <?php
 session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include __DIR__ . '/../includes/db.php';
 $title = "Dashboard Guru";
 $active_page = "dashboard";
 
 // Check if user is logged in
 if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
 // Check if user has valid role
 $role = $_SESSION['user']['role'];
 if (!in_array($role, ['admin', 'guru'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
@@ -29,6 +44,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
     $total_fp = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
     // Dummy: status device online jika ada fingerprint hari ini
     $device_status = $total_fp > 0 ? 'Online' : 'Offline';
+    header('Content-Type: application/json');
     echo json_encode([
         'total_fp' => $total_fp,
         'device_status' => $device_status
@@ -310,13 +326,13 @@ if ($role === 'admin') {
 </div>
 
 <!-- JS SB Admin -->
-<script src="/absensi_sekolah/assets/vendor/jquery/jquery.min.js"></script>
-<script src="/absensi_sekolah/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-<script src="/absensi_sekolah/assets/vendor/jquery-easing/jquery.easing.min.js"></script>
-<script src="/absensi_sekolah/assets/js/sb-admin-2.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/jquery/jquery.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/jquery-easing/jquery.easing.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/js/sb-admin-2.min.js"></script>
 
 
-<script src="/absensi_sekolah/assets/vendor/chart.js/Chart.bundle.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.bundle.min.js"></script>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {

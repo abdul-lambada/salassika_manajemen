@@ -1,0 +1,11 @@
+# Deny access to all files
+<Files *>
+    Order Deny,Allow
+    Deny from all
+</Files>
+
+# Allow access to index files
+<Files index.php>
+    Order Allow,Deny
+    Allow from all
+</Files>

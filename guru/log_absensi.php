@@ -1,9 +1,28 @@
 <?php
 // Aktifkan output buffering untuk menghindari masalah header
 ob_start();
+session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 
 $title = "Log Kehadiran";
 $active_page = "log_absensi"; // Untuk menandai menu aktif di sidebar
+
+// Enforce auth (guru/admin)
+if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['guru','admin'])) {
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
+    exit;
+}
+
 include __DIR__ . '/../templates/header.php';
 include __DIR__ . '/../templates/sidebar.php';
 
@@ -16,17 +35,26 @@ $offset = ($page - 1) * $limit;
 $ip_address = isset($_GET['ip']) ? $_GET['ip'] : '';
 
 // Cek apakah tombol submit ditekan untuk mengambil data dari mesin fingerprint
+// CSRF token for POST
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
 $message = '';
 $alert_class = '';
 if (isset($_POST['submit_ip'])) {
-    $ip_address = trim($_POST['ip_address']);
-    if (!empty($ip_address)) {
-        // Redirect dengan parameter IP
-        header("Location: log_absensi.php?ip=" . urlencode($ip_address));
-        exit();
-    } else {
-        $message = 'IP Address tidak boleh kosong.';
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        $message = 'Invalid CSRF token.';
         $alert_class = 'alert-danger';
+    } else {
+        $ip_address = trim($_POST['ip_address']);
+        if (!empty($ip_address) && filter_var($ip_address, FILTER_VALIDATE_IP)) {
+            // Redirect dengan parameter IP
+            header("Location: log_absensi.php?ip=" . urlencode($ip_address));
+            exit();
+        } else {
+            $message = 'IP Address tidak valid atau kosong.';
+            $alert_class = 'alert-danger';
+        }
     }
 }
 
@@ -133,7 +161,7 @@ if (!empty($ip_address)) {
             <!-- Begin Alert SB Admin 2 -->
             <?php if (!empty($message)): ?>
                 <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
+                    <?php echo htmlspecialchars($message); ?>
                     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -150,6 +178,7 @@ if (!empty($ip_address)) {
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                 <div class="form-group row">
                                     <label for="ip_address" class="col-sm-2 col-form-label">IP Address:</label>
                                     <div class="col-sm-8">

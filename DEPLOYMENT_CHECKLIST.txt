@@ -1,0 +1,66 @@
+PRODUCTION DEPLOYMENT CHECKLIST
+================================
+Generated: 2025-10-08 12:12:00
+
+PRE-DEPLOYMENT:
+□ Backup current production database
+□ Backup current production files
+□ Test deployment on staging server
+□ Review all configuration files
+□ Ensure all passwords are strong
+
+DEPLOYMENT:
+□ Upload files to production server
+□ Import database schema and data
+□ Update database connection settings
+□ Set proper file permissions (755 for directories, 644 for files)
+□ Configure web server (Apache/Nginx)
+□ Set up SSL certificate
+□ Configure domain and DNS
+
+POST-DEPLOYMENT:
+□ Test login functionality
+□ Test fingerprint integration
+□ Test WhatsApp integration
+□ Verify all user roles work correctly
+□ Check error logs for issues
+□ Monitor server performance
+□ Set up monitoring and alerts
+□ Document deployment process
+
+SECURITY:
+□ Remove .git directory
+□ Protect sensitive files with .htaccess
+□ Disable directory listing
+□ Configure firewall rules
+□ Set up fail2ban for brute force protection
+□ Regular security updates
+
+MAINTENANCE:
+□ Set up automated backups
+□ Configure log rotation
+□ Monitor disk space
+□ Plan for regular updates
+□ Document known issues
+
+FILES REMOVED IN CLEANUP:
+- admin/automatic_test.php
+- admin/debug_test.php
+- admin/test_integration.php
+- admin/fingerprint/test_fingerprint_connection.php
+- admin/whatsapp/test.php
+- admin/whatsapp/test_service.php
+- includes/zklib/test.php
+- test/integration_ecosystem_testing.php
+- test/sidebar_consistency_test.php
+- test/sidebar_improved_test.php
+- test/sidebar_realworld_test.php
+- test/whatsapp_automation_test.php
+
+FILES PROTECTED:
+- includes/.htaccess
+- db/.htaccess
+- logs/.htaccess
+- vendor/.htaccess
+- migrations/.htaccess
+- scripts/.htaccess

@@ -1,11 +1,22 @@
 <?php
 session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include '../includes/db.php';
 $active_page = "laporan_siswa"; // Untuk menandai menu aktif di sidebar
 
 // Periksa apakah sesi 'user' tersedia
 if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 

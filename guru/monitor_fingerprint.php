@@ -1,10 +1,21 @@
 <?php
 session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include '../includes/db.php';
 
 // Periksa apakah sesi 'user' tersedia
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'guru') {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
@@ -96,7 +107,7 @@ try {
     <link rel="icon" type="image/jpeg" href="../assets/img/logo.jpg">
     <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
     <link href="../css/sb-admin-2.css" rel="stylesheet">
-    <script src="../vendor/chart.js/Chart.js"></script>
+    <script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.min.js"></script>
     <style>
         .fingerprint-badge {
             background-color: #007bff;

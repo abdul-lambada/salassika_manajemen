@@ -1,7 +1,18 @@
 <?php
 session_start();
+// Load configs and production settings
+if (file_exists(__DIR__ . '/../../includes/config.php')) {
+    include __DIR__ . '/../../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../../config/production.php')) {
+    include __DIR__ . '/../../config/production.php';
+}
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../../auth/login.php');
+    }
     exit;
 }
 include '../../includes/db.php';
@@ -10,54 +21,77 @@ $active_page = 'manage_devices';
 $message = '';
 $alert_class = '';
 
-// Tambah device
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tambah_device'])) {
-    $ip = $_POST['ip'];
-    $port = $_POST['port'];
-    $nama_lokasi = $_POST['nama_lokasi'];
-    $keterangan = $_POST['keterangan'];
-    $stmt = $conn->prepare("INSERT INTO fingerprint_devices (ip, port, nama_lokasi, keterangan, is_active) VALUES (?, ?, ?, ?, 1)");
-    if ($stmt->execute([$ip, $port, $nama_lokasi, $keterangan])) {
-        $message = 'Device berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-    } else {
-        $message = 'Gagal menambah device.';
-        $alert_class = 'alert-danger';
+// CSRF utilities
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+function check_csrf() {
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        throw new Exception('Invalid CSRF token');
     }
 }
-// Edit device
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_device'])) {
-    $id = $_POST['id'];
-    $ip = $_POST['ip'];
-    $port = $_POST['port'];
-    $nama_lokasi = $_POST['nama_lokasi'];
-    $keterangan = $_POST['keterangan'];
-    $stmt = $conn->prepare("UPDATE fingerprint_devices SET ip=?, port=?, nama_lokasi=?, keterangan=? WHERE id=?");
-    if ($stmt->execute([$ip, $port, $nama_lokasi, $keterangan, $id])) {
-        $message = 'Device berhasil diupdate.';
-        $alert_class = 'alert-success';
-    } else {
-        $message = 'Gagal update device.';
-        $alert_class = 'alert-danger';
+
+try {
+    // Tambah device
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tambah_device'])) {
+        check_csrf();
+        $ip = trim($_POST['ip']);
+        $port = (int)$_POST['port'];
+        $nama_lokasi = trim($_POST['nama_lokasi']);
+        $keterangan = trim($_POST['keterangan'] ?? '');
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) { throw new Exception('IP Address tidak valid'); }
+        if ($port < 1 || $port > 65535) { throw new Exception('Port tidak valid'); }
+        $stmt = $conn->prepare("INSERT INTO fingerprint_devices (ip, port, nama_lokasi, keterangan, is_active) VALUES (?, ?, ?, ?, 1)");
+        if ($stmt->execute([$ip, $port, $nama_lokasi, $keterangan])) {
+            $message = 'Device berhasil ditambahkan.';
+            $alert_class = 'alert-success';
+        } else {
+            throw new Exception('Gagal menambah device.');
+        }
     }
-}
-// Hapus device
-if (isset($_GET['hapus'])) {
-    $id = $_GET['hapus'];
-    $stmt = $conn->prepare("DELETE FROM fingerprint_devices WHERE id=?");
-    if ($stmt->execute([$id])) {
-        $message = 'Device berhasil dihapus.';
-        $alert_class = 'alert-success';
-    } else {
-        $message = 'Gagal hapus device.';
-        $alert_class = 'alert-danger';
+    // Edit device
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_device'])) {
+        check_csrf();
+        $id = (int)$_POST['id'];
+        $ip = trim($_POST['ip']);
+        $port = (int)$_POST['port'];
+        $nama_lokasi = trim($_POST['nama_lokasi']);
+        $keterangan = trim($_POST['keterangan'] ?? '');
+        if ($id <= 0) { throw new Exception('ID tidak valid'); }
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) { throw new Exception('IP Address tidak valid'); }
+        if ($port < 1 || $port > 65535) { throw new Exception('Port tidak valid'); }
+        $stmt = $conn->prepare("UPDATE fingerprint_devices SET ip=?, port=?, nama_lokasi=?, keterangan=? WHERE id=?");
+        if ($stmt->execute([$ip, $port, $nama_lokasi, $keterangan, $id])) {
+            $message = 'Device berhasil diupdate.';
+            $alert_class = 'alert-success';
+        } else {
+            throw new Exception('Gagal update device.');
+        }
     }
-}
-// Aktif/nonaktif device
-if (isset($_GET['toggle'])) {
-    $id = $_GET['toggle'];
-    $stmt = $conn->prepare("UPDATE fingerprint_devices SET is_active = 1 - is_active WHERE id=?");
-    $stmt->execute([$id]);
+    // Hapus device (POST)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hapus_device'])) {
+        check_csrf();
+        $id = (int)$_POST['id'];
+        if ($id <= 0) { throw new Exception('ID tidak valid'); }
+        $stmt = $conn->prepare("DELETE FROM fingerprint_devices WHERE id=?");
+        if ($stmt->execute([$id])) {
+            $message = 'Device berhasil dihapus.';
+            $alert_class = 'alert-success';
+        } else {
+            throw new Exception('Gagal hapus device.');
+        }
+    }
+    // Aktif/nonaktif device (POST)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_device'])) {
+        check_csrf();
+        $id = (int)$_POST['id'];
+        if ($id <= 0) { throw new Exception('ID tidak valid'); }
+        $stmt = $conn->prepare("UPDATE fingerprint_devices SET is_active = 1 - is_active WHERE id=?");
+        $stmt->execute([$id]);
+    }
+} catch (Exception $ex) {
+    $message = $ex->getMessage();
+    $alert_class = 'alert-danger';
 }
 // Ambil data device
 $stmt = $conn->query("SELECT * FROM fingerprint_devices ORDER BY id DESC");
@@ -73,7 +107,7 @@ include '../../templates/sidebar.php';
             <!-- <h1 class="h3 mb-4 text-gray-800">Manajemen Device Fingerprint</h1> -->
             <?php if ($message): ?>
                 <div class="alert <?= $alert_class ?> alert-dismissible fade show" role="alert">
-                    <?= $message ?>
+                    <?= htmlspecialchars($message) ?>
                     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
@@ -85,6 +119,7 @@ include '../../templates/sidebar.php';
                         <div class="card-header py-3"><b>Tambah Device</b></div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                 <div class="form-group">
                                     <label>IP Address</label>
                                     <input type="text" name="ip" class="form-control" required>
@@ -136,8 +171,16 @@ include '../../templates/sidebar.php';
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <a href="?toggle=<?= $d['id'] ?>" class="btn btn-sm btn-warning">Aktif/Nonaktif</a>
-                                                <a href="?hapus=<?= $d['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Hapus device ini?')">Hapus</a>
+                                                <form method="POST" action="" style="display:inline">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                    <input type="hidden" name="id" value="<?= (int)$d['id'] ?>">
+                                                    <button type="submit" name="toggle_device" class="btn btn-sm btn-warning">Aktif/Nonaktif</button>
+                                                </form>
+                                                <form method="POST" action="" style="display:inline" onsubmit="return confirm('Hapus device ini?')">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                                    <input type="hidden" name="id" value="<?= (int)$d['id'] ?>">
+                                                    <button type="submit" name="hapus_device" class="btn btn-sm btn-danger">Hapus</button>
+                                                </form>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>

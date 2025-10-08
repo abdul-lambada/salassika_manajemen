@@ -1,0 +1,21 @@
+
+# Protect .env file
+<Files .env>
+    Order Deny,Allow
+    Deny from all
+    Require all denied
+</Files>
+
+# Protect composer files
+<FilesMatch "^composer\.(json|lock)$">
+    Order Deny,Allow
+    Deny from all
+    Require all denied
+</FilesMatch>
+
+# Block access to .git directory (works in per-directory context)
+RewriteEngine On
+RewriteRule ^\.git - [F,L]
+
+# Disable directory listing
+Options -Indexes

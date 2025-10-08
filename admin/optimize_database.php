@@ -1,9 +1,20 @@
 <?php
 session_start();
+// Load configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include '../includes/db.php';
 
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 

@@ -1,52 +1,96 @@
 <?php
+session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
+
 $title = "List User Fingerprint Guru";
 $active_page = "list_users"; // Untuk menandai menu aktif di sidebar
+
+// Enforce auth (guru/admin)
+if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['guru','admin'])) {
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
+    exit;
+}
+
 include __DIR__ . '/../templates/header.php';
 include __DIR__ . '/../templates/sidebar.php';
 
-// Input IP address and port for ZKTeco device
+// Default device parameters
 $device_ip = isset($_POST['device_ip']) ? $_POST['device_ip'] : '192.168.1.201';
-$device_port = isset($_POST['device_port']) ? $_POST['device_port'] : 4370;
+$device_port = isset($_POST['device_port']) ? (int)$_POST['device_port'] : 4370;
 
-// Koneksi ke ZKTeco device
-require '../includes/zklib/zklibrary.php';
-$zk = new ZKLibrary($device_ip, $device_port);
-$zk->connect();
-$zk->disableDevice();
-
-// Ambil data pengguna dari device
-$users = $zk->getUser();
+// CSRF token for POST actions
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
 
 // Koneksi ke database
 include '../includes/db.php';
 
-try {
-    // Insert data pengguna ke tabel users
-    foreach ($users as $key => $user) {
-        $uid = $key;
-        $id = $user[0];
-        $name = $user[1];
-        $role = $user[2] == 0 ? 'User' : 'Admin'; // Update role handling
-        $password = $user[3];
+// Optional: Connect to device and sync users only on valid POST with CSRF
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['device_ip'], $_POST['device_port'])) {
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        $message = 'Invalid CSRF token.';
+        $alert_class = 'alert-danger';
+    } else {
+        // Validate IP and port
+        $valid_ip = filter_var($device_ip, FILTER_VALIDATE_IP);
+        $valid_port = ($device_port >= 1 && $device_port <= 65535);
+        if ($valid_ip && $valid_port) {
+            require '../includes/zklib/zklibrary.php';
+            try {
+                $zk = new ZKLibrary($device_ip, $device_port);
+                $zk->connect();
+                $zk->disableDevice();
+                // Ambil data pengguna dari device
+                $users = $zk->getUser();
 
-        // Query untuk memeriksa apakah UID sudah ada di database
-        $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE uid = :uid");
-        $stmt->execute(['uid' => $uid]);
-        $exists = $stmt->fetchColumn();
+                // Insert/sync ke database
+                foreach ($users as $key => $user) {
+                    $uid = $key;
+                    $id = $user[0];
+                    $name = $user[1];
+                    $role = $user[2] == 0 ? 'User' : 'Admin';
+                    $password = $user[3];
 
-        if (!$exists) {
-            // Insert data jika UID belum ada
-            $insertStmt = $conn->prepare("INSERT INTO users (uid, name, role, password) VALUES (:uid, :name, :role, :password)");
-            $insertStmt->execute([
-                'uid' => $uid,
-                'name' => $name,
-                'role' => $role,
-                'password' => $password
-            ]);
+                    $stmt = $conn->prepare("SELECT COUNT(*) FROM users WHERE uid = :uid");
+                    $stmt->execute(['uid' => $uid]);
+                    $exists = $stmt->fetchColumn();
+                    if (!$exists) {
+                        $insertStmt = $conn->prepare("INSERT INTO users (uid, name, role, password) VALUES (:uid, :name, :role, :password)");
+                        $insertStmt->execute([
+                            'uid' => $uid,
+                            'name' => $name,
+                            'role' => $role,
+                            'password' => $password
+                        ]);
+                    }
+                }
+
+                // Aktifkan kembali device dan putuskan koneksi
+                $zk->enableDevice();
+                $zk->disconnect();
+
+                $connected_ip_message = "Terhubung ke perangkat dengan IP: " . htmlspecialchars($device_ip);
+                $connected_ip_alert_class = 'alert-info';
+            } catch (Exception $e) {
+                $message = 'Gagal koneksi ke device: ' . $e->getMessage();
+                $alert_class = 'alert-danger';
+            }
+        } else {
+            $message = 'IP atau port tidak valid.';
+            $alert_class = 'alert-danger';
         }
     }
-} catch (PDOException $e) {
-    echo "Database error: " . $e->getMessage();
 }
 
 // Pagination: retrieve current page and set limit
@@ -66,13 +110,11 @@ try {
     echo "Database error: " . $e->getMessage();
 }
 
-// Aktifkan kembali device dan putuskan koneksi
-$zk->enableDevice();
-$zk->disconnect();
-
-// Alert to display the connected IP address
-$connected_ip_message = "Terhubung ke perangkat dengan IP: $device_ip";
-$connected_ip_alert_class = 'alert-info';
+// Default alert info if not set by sync
+if (!isset($connected_ip_message)) {
+    $connected_ip_message = "Siapkan koneksi ke perangkat dengan IP: " . htmlspecialchars($device_ip);
+    $connected_ip_alert_class = 'alert-secondary';
+}
 
 // Cek status dari query string
 $status = isset($_GET['status']) ? $_GET['status'] : '';
@@ -102,13 +144,14 @@ switch ($status) {
         <div class="container-fluid">
             <!-- Form to input device IP and port -->
             <form method="POST" action="" class="py-2">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <div class="form-group">
                     <label for="device_ip">Device IP:</label>
-                    <input type="text" class="form-control" id="device_ip" name="device_ip" value="<?php echo htmlspecialchars($device_ip); ?>">
+                    <input type="text" class="form-control" id="device_ip" name="device_ip" value="<?php echo htmlspecialchars($device_ip); ?>" required>
                 </div>
                 <div class="form-group">
                     <label for="device_port">Device Port:</label>
-                    <input type="text" class="form-control" id="device_port" name="device_port" value="<?php echo htmlspecialchars($device_port); ?>">
+                    <input type="number" min="1" max="65535" class="form-control" id="device_port" name="device_port" value="<?php echo htmlspecialchars($device_port); ?>" required>
                 </div>
                 <button type="submit" class="btn btn-primary">Connect</button>
             </form>
@@ -126,7 +169,7 @@ switch ($status) {
             <!-- Begin Alert SB Admin 2 -->
             <?php if (!empty($message)): ?>
                 <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
+                    <?php echo htmlspecialchars($message); ?>
                     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>

@@ -1,10 +1,21 @@
 <?php
 session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../../includes/config.php')) {
+    include __DIR__ . '/../../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../../config/production.php')) {
+    include __DIR__ . '/../../config/production.php';
+}
 include '../../includes/db.php';
 include '../../includes/advanced_stats_helper.php';
 
 if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'guru'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../../auth/login.php');
+    }
     exit;
 }
 
@@ -395,7 +406,7 @@ include '../../templates/sidebar.php';
 <?php include '../../templates/scripts.php'; ?>
 
 <!-- Chart.js -->
-<script src="/absensi_sekolah/assets/vendor/chart.js/Chart.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.min.js"></script>
 
 <script>
 // Initialize charts when page loads

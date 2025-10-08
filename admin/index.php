@@ -1,19 +1,34 @@
 <?php
 session_start();
+// Load config and production settings
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include __DIR__ . '/../includes/db.php';
 $title = "Dashboard Admin";
 $active_page = "dashboard";
 
 // Check if user is logged in
 if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
 // Check if user has valid role
 $role = $_SESSION['user']['role'];
 if (!in_array($role, ['admin', 'guru'])) {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
@@ -326,7 +341,7 @@ if ($role === 'admin') {
     <?php include __DIR__ . '/../templates/footer.php'; ?>
 </div>
 
-<script src="/absensi_sekolah/assets/vendor/chart.js/Chart.bundle.min.js"></script>
+<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.bundle.min.js"></script>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {

@@ -1,19 +1,31 @@
 <?php
 session_start();
 
+// Load global configs
+if (file_exists(__DIR__ . '/../../includes/config.php')) {
+    include __DIR__ . '/../../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../../config/production.php')) {
+    include __DIR__ . '/../../config/production.php';
+}
+
 $title = "Konfigurasi WhatsApp";
 $active_page = "whatsapp_config";
 
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-include '../../includes/db.php';
-require_once __DIR__ . '/../../includes/wa_util.php';
-
-// Check if user is logged in and has admin role
+// Check if user is logged in and has admin role BEFORE rendering templates
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../../auth/login.php');
+    }
     exit;
 }
+
+include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/wa_util.php';
+include '../../templates/header.php';
+include '../../templates/sidebar.php';
 
 $waService = new WhatsAppService($conn);
 $config = $waService->getConfig();
@@ -256,9 +268,11 @@ if (isset($_POST['test_connection'])) {
                     <strong>Peringatan:</strong> URL API saat ini menggunakan format yang salah. 
                     URL yang benar adalah <code>https://api.fonnte.com</code> (bukan <code>https://api.fonnte.com/send</code>).
                     <br><br>
-                    <button type="submit" name="fix_config" class="btn btn-warning btn-sm">
-                        <i class="fas fa-wrench"></i> Perbaiki Otomatis
-                    </button>
+                    <form method="post" style="display:inline">
+                        <button type="submit" name="fix_config" class="btn btn-warning btn-sm">
+                            <i class="fas fa-wrench"></i> Perbaiki Otomatis
+                        </button>
+                    </form>
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             <?php endif; ?>

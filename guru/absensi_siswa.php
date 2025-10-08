@@ -1,16 +1,37 @@
 <?php
 session_start();
+// Load global configs
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include '../includes/db.php';
 include_once '../includes/email_util.php';
 
 // Periksa apakah sesi 'user' tersedia
 if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'guru') {
-    header("Location: ../auth/login.php");
+    if (defined('APP_URL')) {
+        header('Location: ' . APP_URL . '/auth/login.php');
+    } else {
+        header('Location: ../auth/login.php');
+    }
     exit;
 }
 
 $active_page = "absensi_siswa"; // Untuk menandai menu aktif di sidebar
 $message = ''; // Variabel untuk menyimpan pesan sukses
+
+// CSRF protection
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+}
+function csrf_check() {
+    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+        throw new Exception('Invalid CSRF token');
+    }
+}
 
 try {
     // Ambil daftar kelas
@@ -20,6 +41,7 @@ try {
 
     // Jika form absensi disubmit
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_absensi'])) {
+        csrf_check();
         $tanggal = date('Y-m-d');
         $id_kelas = $_POST['id_kelas'];
         $error = false;
@@ -36,6 +58,9 @@ try {
             $catatan = htmlspecialchars($_POST['catatan'][$id_siswa]);
 
             try {
+                // Initialize check statement before using it
+                $stmt_check = $conn->prepare("SELECT 1 FROM absensi_siswa WHERE id_siswa = :id_siswa AND tanggal = :tanggal");
+                $stmt_check->execute([':id_siswa' => $id_siswa, ':tanggal' => $tanggal]);
                 if ($stmt_check->rowCount() > 0) {
                     $stmt_update = $conn->prepare("
                         UPDATE absensi_siswa 
@@ -411,6 +436,7 @@ try {
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                                 <input type="hidden" name="id_kelas" value="<?php echo htmlspecialchars($id_kelas); ?>">
                                 <div class="table-responsive">
                                     <table class="table table-bordered table-hover">

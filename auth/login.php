@@ -1,6 +1,14 @@
 <?php
 session_start();
 ob_start();
+// Load global config (reads .env, defines APP_URL, session hardening)
+if (file_exists(__DIR__ . '/../includes/config.php')) {
+    include __DIR__ . '/../includes/config.php';
+}
+// Optional production config (headers, error reporting)
+if (file_exists(__DIR__ . '/../config/production.php')) {
+    include __DIR__ . '/../config/production.php';
+}
 include '../includes/db.php';
 
 $error = "";
@@ -72,9 +80,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             // Redirect berdasarkan role - semua ke dashboard tunggal
             if ($user['role'] === 'admin') {
-                header('Location: /absensi_sekolah/admin/index.php');
+                if (defined('APP_URL')) {
+                    header('Location: ' . APP_URL . '/admin/index.php');
+                } else {
+                    header('Location: ../admin/index.php');
+                }
             } elseif ($user['role'] === 'guru') {
-                header('Location: /absensi_sekolah/guru/index.php');
+                if (defined('APP_URL')) {
+                    header('Location: ' . APP_URL . '/guru/index.php');
+                } else {
+                    header('Location: ../guru/index.php');
+                }
             } else {
                 // Siswa tidak bisa login ke sistem admin
                 $error = "<div class='alert alert-warning alert-dismissible fade show' role='alert'>
