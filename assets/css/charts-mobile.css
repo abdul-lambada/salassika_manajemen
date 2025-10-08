@@ -1,0 +1,125 @@
+/* Mobile-Responsive Charts & Reports */
+
+/* Chart Container Responsiveness */
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+    .chart-container {
+        height: 300px;
+    }
+}
+
+@media (max-width: 480px) {
+    .chart-container {
+        height: 250px;
+    }
+}
+
+/* Responsive Chart Canvas */
+.chart-container canvas {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+/* Mobile Report Filters */
+.report-filters {
+    background: #f8f9fc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+    .report-filters .form-row {
+        flex-direction: column;
+    }
+    
+    .report-filters .col-md-3,
+    .report-filters .col-md-4 {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    .report-filters .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Mobile Statistics Cards */
+.stats-card-mobile {
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 576px) {
+    .stats-card-mobile .card-body {
+        padding: 1rem 0.75rem;
+    }
+    
+    .stats-card-mobile .text-xs {
+        font-size: 0.7rem;
+    }
+    
+    .stats-card-mobile .h5 {
+        font-size: 1.1rem;
+    }
+}
+
+/* Mobile Export Buttons */
+.export-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+@media (max-width: 768px) {
+    .export-buttons {
+        flex-direction: column;
+    }
+    
+    .export-buttons .btn {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Loading States for Charts */
+.chart-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 300px;
+    background: #f8f9fc;
+    border-radius: 0.5rem;
+}
+
+.chart-loading .spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Print Styles for Reports */
+@media print {
+    .export-buttons,
+    .report-filters,
+    .no-print {
+        display: none !important;
+    }
+    
+    .chart-container {
+        height: 300px;
+        page-break-inside: avoid;
+    }
+    
+    .stats-card-mobile {
+        border: 1px solid #ddd;
+        page-break-inside: avoid;
+        margin-bottom: 1rem;
+    }
+}

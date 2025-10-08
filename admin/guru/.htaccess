@@ -1,0 +1,23 @@
+# Protect admin directories
+<Files *.php>
+    Order Deny,Allow
+    Deny from all
+    Allow from 127.0.0.1
+    Allow from ::1
+    # Add your IP addresses here
+</Files>
+
+# Prevent direct access to sensitive files
+<Files ~ "\.(sql|log|txt|md)$">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Disable directory browsing
+Options -Indexes
+
+# Prevent access to config files
+<Files "config.php">
+    Order Allow,Deny
+    Deny from all
+</Files>
