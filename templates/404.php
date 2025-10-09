@@ -4,22 +4,23 @@ $title = "404 Not Found";
 $active_page = "404";
 
 // Tentukan dashboard berdasarkan role
-$dashboard_url = '/absensi_sekolah/';
+$BASE = defined('APP_URL') ? APP_URL : '';
+$dashboard_url = $BASE . '/';
 if (isset($_SESSION['user']['role'])) {
     if ($_SESSION['user']['role'] === 'admin') {
-        $dashboard_url = '/absensi_sekolah/admin/index.php';
+        $dashboard_url = $BASE . '/admin/index.php';
     } elseif ($_SESSION['user']['role'] === 'guru') {
-        $dashboard_url = '/absensi_sekolah/guru/index.php';
+        $dashboard_url = $BASE . '/guru/index.php';
     }
 }
 
-include 'header.php';
-include 'sidebar.php';
+include __DIR__ . '/header.php';
+include __DIR__ . '/sidebar.php';
 ?>
 
 <div id="content-wrapper" class="d-flex flex-column">
     <div id="content">
-        <?php include 'navbar.php'; ?>
+        <?php include __DIR__ . '/navbar.php'; ?>
         <div class="container-fluid">
             <div class="row justify-content-center">
                 <div class="col-lg-6 text-center">
@@ -40,7 +41,7 @@ include 'sidebar.php';
             </div>
         </div>
     </div>
-    <?php include 'footer.php'; ?>
+    <?php include __DIR__ . '/footer.php'; ?>
 </div>
 
 <style>
@@ -68,6 +69,8 @@ include 'sidebar.php';
     font-size: 1.1rem;
 }
 </style>
+
+<?php include __DIR__ . '/scripts.php'; ?>
 
 </body>
 </html> 

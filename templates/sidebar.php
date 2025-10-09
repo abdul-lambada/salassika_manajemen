@@ -341,37 +341,3 @@ $BASE = defined('APP_URL') ? APP_URL : '';
         <button class="rounded-circle border-0" id="sidebarToggle"></button>
     </div>
 </ul>
-
-<script>
-$(document).ready(function() {
-    // Handle dropdown toggle with proper accordion behavior
-    $('.nav-link[data-toggle="collapse"]').on('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        var target = $(this).data('target');
-        var isCurrentlyExpanded = $(this).attr('aria-expanded') === 'true';
-        
-        // Close all other dropdowns first
-        $('.collapse.show').not(target).collapse('hide');
-        $('.nav-link[data-toggle="collapse"]').not(this).attr('aria-expanded', 'false');
-        $('.nav-link[data-toggle="collapse"]').not(this).addClass('collapsed');
-        
-        // Toggle current dropdown
-        if (isCurrentlyExpanded) {
-            $(target).collapse('hide');
-            $(this).attr('aria-expanded', 'false');
-            $(this).addClass('collapsed');
-        } else {
-            $(target).collapse('show');
-            $(this).attr('aria-expanded', 'true');
-            $(this).removeClass('collapsed');
-        }
-    });
-    
-    // Prevent dropdown from closing when clicking on collapse items
-    $('.collapse-item').on('click', function(e) {
-        e.stopPropagation();
-    });
-});
-</script>
