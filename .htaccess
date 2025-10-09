@@ -1,4 +1,7 @@
 
+# Force index.php as default before index.html
+DirectoryIndex index.php index.html
+
 # Protect .env file
 <Files .env>
     Order Deny,Allow
