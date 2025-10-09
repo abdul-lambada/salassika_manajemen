@@ -132,136 +132,30 @@ if ($role === 'admin') {
                 <?php if ($role === 'admin'): ?>
                     <!-- Admin Dashboard Content -->
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-primary shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                            Total Guru</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $guru_count ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-chalkboard-teacher fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='primary'; $icon='fas fa-chalkboard-teacher'; $title_text='Total Guru'; $value_html=$guru_count; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-success shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                            Total Siswa</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $siswa_count ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-users fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='success'; $icon='fas fa-users'; $title_text='Total Siswa'; $value_html=$siswa_count; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-info shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                            Absensi Hari Ini</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $absensi_today ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='info'; $icon='fas fa-clipboard-list'; $title_text='Absensi Hari Ini'; $value_html=$absensi_today; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-warning shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                            Device Fingerprint</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $device_status ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-fingerprint fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='warning'; $icon='fas fa-fingerprint'; $title_text='Device Fingerprint'; $value_html=$device_status; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                 <?php elseif ($role === 'guru'): ?>
                     <!-- Guru Dashboard Content -->
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-primary shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                            Absensi Hari Ini</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $absensi_today ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-clock fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='primary'; $icon='fas fa-clock'; $title_text='Absensi Hari Ini'; $value_html=$absensi_today; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-success shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                            Total Siswa<?= $nama_kelas ? ' ('.$nama_kelas.')' : '' ?></div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $siswa_count ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-users fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='success'; $icon='fas fa-users'; $title_text='Total Siswa'.($nama_kelas ? ' ('.$nama_kelas.')' : ''); $value_html=$siswa_count; include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-info shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                            Status Kehadiran</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?= $status_kehadiran ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='info'; $icon='fas fa-check-circle'; $title_text='Status Kehadiran'; $value_html=htmlspecialchars($status_kehadiran); include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-warning shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                            Menu Tersedia</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $menu_tersedia ?> Menu</div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-bars fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php $border='warning'; $icon='fas fa-bars'; $title_text='Menu Tersedia'; $value_html=htmlspecialchars($menu_tersedia.' Menu'); include __DIR__ . '/../templates/components/card_stat.php'; ?>
                     </div>
                     <div class="col-xl-3 col-md-6 mb-4">
                         <div class="card border-left-warning shadow h-100 py-2">
@@ -325,14 +219,7 @@ if ($role === 'admin') {
     <?php include __DIR__ . '/../templates/footer.php'; ?>
 </div>
 
-<!-- JS SB Admin -->
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/jquery/jquery.min.js"></script>
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/jquery-easing/jquery.easing.min.js"></script>
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/js/sb-admin-2.min.js"></script>
-
-
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.bundle.min.js"></script>
+<?php include __DIR__ . '/../templates/scripts.php'; ?>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {

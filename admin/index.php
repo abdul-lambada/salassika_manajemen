@@ -79,111 +79,56 @@ if (file_exists($log_file)) {
                 <?php if ($role === 'admin'): ?>
                     <!-- Admin Dashboard Content -->
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-primary shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                            Total Guru</div>
-                                        <?php
-                                        $stmt = $conn->query("SELECT COUNT(*) as total FROM guru");
-                                        $guru_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-                                        ?>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $guru_count ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-chalkboard-teacher fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php
+                        $stmt = $conn->query("SELECT COUNT(*) as total FROM guru");
+                        $guru_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+                        $border='primary'; $icon='fas fa-chalkboard-teacher'; $title_text='Total Guru'; $value_html=$guru_count;
+                        include __DIR__ . '/../templates/components/card_stat.php';
+                        ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-success shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                            Total Siswa</div>
-                                        <?php
-                                        $stmt = $conn->query("SELECT COUNT(*) as total FROM siswa");
-                                        $siswa_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-                                        ?>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $siswa_count ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-users fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php
+                        $stmt = $conn->query("SELECT COUNT(*) as total FROM siswa");
+                        $siswa_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+                        $border='success'; $icon='fas fa-users'; $title_text='Total Siswa'; $value_html=$siswa_count;
+                        include __DIR__ . '/../templates/components/card_stat.php';
+                        ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-info shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                            Absensi Hari Ini</div>
-                                        <?php
-                                        $today = date('Y-m-d');
-                                        // Hitung absensi guru hari ini
-                                        $stmt_guru = $conn->prepare("SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today");
-                                        $stmt_guru->bindParam(':today', $today);
-                                        $stmt_guru->execute();
-                                        $absensi_guru_today = $stmt_guru->fetch(PDO::FETCH_ASSOC)['total'];
-                                        // Hitung absensi siswa hari ini
-                                        $stmt_siswa = $conn->prepare("SELECT COUNT(*) as total FROM absensi_siswa WHERE DATE(tanggal) = :today");
-                                        $stmt_siswa->bindParam(':today', $today);
-                                        $stmt_siswa->execute();
-                                        $absensi_siswa_today = $stmt_siswa->fetch(PDO::FETCH_ASSOC)['total'];
-                                        $absensi_today = $absensi_guru_today + $absensi_siswa_today;
-                                        ?>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $absensi_today ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php
+                        $today = date('Y-m-d');
+                        $stmt_guru = $conn->prepare("SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today");
+                        $stmt_guru->bindParam(':today', $today);
+                        $stmt_guru->execute();
+                        $absensi_guru_today = $stmt_guru->fetch(PDO::FETCH_ASSOC)['total'];
+                        $stmt_siswa = $conn->prepare("SELECT COUNT(*) as total FROM absensi_siswa WHERE DATE(tanggal) = :today");
+                        $stmt_siswa->bindParam(':today', $today);
+                        $stmt_siswa->execute();
+                        $absensi_siswa_today = $stmt_siswa->fetch(PDO::FETCH_ASSOC)['total'];
+                        $absensi_today = $absensi_guru_today + $absensi_siswa_today;
+                        $border='info'; $icon='fas fa-clipboard-list'; $title_text='Absensi Hari Ini'; $value_html=$absensi_today;
+                        include __DIR__ . '/../templates/components/card_stat.php';
+                        ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-warning shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                            Device Fingerprint</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">Online</div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-fingerprint fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php
+                        $border='warning'; $icon='fas fa-fingerprint'; $title_text='Device Fingerprint'; $value_html='Online';
+                        include __DIR__ . '/../templates/components/card_stat.php';
+                        ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-info shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Status Sinkronisasi Fingerprint</div>
-                                        <div class="h6 mb-0 font-weight-bold text-gray-800">Terakhir: <?= htmlspecialchars($last_sync_time) ?></div>
-                                        <div class="small mb-0">Status: <span class="badge badge-<?= strtolower($last_sync_status) === 'success' ? 'success' : (strtolower($last_sync_status) === 'error' ? 'danger' : 'secondary') ?>"><?= htmlspecialchars($last_sync_status) ?></span></div>
-                                        <div class="small text-muted">Pesan: <?= htmlspecialchars($last_sync_msg) ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-sync-alt fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <?php
+                        $border='info'; $icon='fas fa-sync-alt'; $title_text='Status Sinkronisasi Fingerprint';
+                        $badgeClass = strtolower($last_sync_status) === 'success' ? 'success' : (strtolower($last_sync_status) === 'error' ? 'danger' : 'secondary');
+                        $value_html = '<div class="h6 mb-0 font-weight-bold text-gray-800">Terakhir: '.htmlspecialchars($last_sync_time).'</div>'
+                            .'<div class="small mb-0">Status: <span class="badge badge-'.$badgeClass.'">'.htmlspecialchars($last_sync_status).'</span></div>'
+                            .'<div class="small text-muted">Pesan: '.htmlspecialchars($last_sync_msg).'</div>';
+                        include __DIR__ . '/../templates/components/card_stat.php';
+                        ?>
                     </div>
 
                 <?php elseif ($role === 'guru'): ?>
@@ -340,8 +285,6 @@ if ($role === 'admin') {
     
     <?php include __DIR__ . '/../templates/footer.php'; ?>
 </div>
-
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.bundle.min.js"></script>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {
