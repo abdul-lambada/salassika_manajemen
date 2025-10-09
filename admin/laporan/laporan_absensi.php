@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Load global configs
 if (file_exists(__DIR__ . '/../../includes/config.php')) {
     include __DIR__ . '/../../includes/config.php';
@@ -10,28 +12,27 @@ if (file_exists(__DIR__ . '/../../config/production.php')) {
 include '../../includes/db.php';
 include '../../includes/advanced_stats_helper.php';
 
-if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'guru'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../../auth/login.php');
-    }
+$role = strtolower($_SESSION['user']['role'] ?? '');
+if (!in_array($role, ['admin', 'guru'], true)) {
+    $login = defined('APP_URL') ? APP_URL . '/auth/login.php' : '../../auth/login.php';
+    header('Location: ' . $login);
     exit;
 }
 
-$title = "Laporan Absensi";
-$active_page = "laporan_absensi";
+$title = 'Laporan Absensi';
+$active_page = 'laporan_absensi';
+$required_role = null; // admin & guru allowed
 
 // Filter parameters
 $tanggal_mulai = isset($_GET['tanggal_mulai']) ? $_GET['tanggal_mulai'] : date('Y-m-01');
 $tanggal_akhir = isset($_GET['tanggal_akhir']) ? $_GET['tanggal_akhir'] : date('Y-m-d');
-$tipe_user = isset($_GET['tipe_user']) ? $_GET['tipe_user'] : 'all'; // 'guru', 'siswa', 'all'
+$tipe_user = isset($_GET['tipe_user']) ? $_GET['tipe_user'] : 'all';  // 'guru', 'siswa', 'all'
 $id_kelas = isset($_GET['id_kelas']) ? $_GET['id_kelas'] : '';
 $status_kehadiran = isset($_GET['status_kehadiran']) ? $_GET['status_kehadiran'] : '';
 
 try {
     // Ambil daftar kelas untuk filter
-    $stmt_kelas = $conn->prepare("SELECT id_kelas, nama_kelas FROM kelas ORDER BY nama_kelas");
+    $stmt_kelas = $conn->prepare('SELECT id_kelas, nama_kelas FROM kelas ORDER BY nama_kelas');
     $stmt_kelas->execute();
     $kelas_list = $stmt_kelas->fetchAll(PDO::FETCH_ASSOC);
 
@@ -46,12 +47,12 @@ try {
     }
 
     if ($id_kelas && $tipe_user === 'siswa') {
-        $where_conditions[] = "s.id_kelas = :id_kelas";
+        $where_conditions[] = 's.id_kelas = :id_kelas';
         $params[':id_kelas'] = $id_kelas;
     }
 
     if ($status_kehadiran) {
-        $where_conditions[] = "COALESCE(ag.status_kehadiran, asis.status_kehadiran) = :status_kehadiran";
+        $where_conditions[] = 'COALESCE(ag.status_kehadiran, asis.status_kehadiran) = :status_kehadiran';
         $params[':status_kehadiran'] = $status_kehadiran;
     }
 
@@ -121,18 +122,12 @@ try {
     $stmt_stats = $conn->prepare($stats_query);
     $stmt_stats->execute($params);
     $stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
-
 } catch (PDOException $e) {
-    $error_message = "Error: " . $e->getMessage();
+    $error_message = 'Error: ' . $e->getMessage();
 }
 
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+include '../../templates/layout_start.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Laporan Absensi</h1> -->
 
@@ -362,18 +357,25 @@ include '../../templates/sidebar.php';
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <?php 
+                                        <?php
                                         $status_manual = $data['status_guru'] ?: $data['status_siswa'];
-                                        if ($status_manual): 
+                                        if ($status_manual):
                                             $status_class = '';
                                             switch ($status_manual) {
-                                                case 'Hadir': $status_class = 'success'; break;
-                                                case 'Telat': $status_class = 'warning'; break;
-                                                case 'Izin': 
-                                                case 'Sakit': $status_class = 'info'; break;
-                                                default: $status_class = 'danger';
+                                                case 'Hadir':
+                                                    $status_class = 'success';
+                                                    break;
+                                                case 'Telat':
+                                                    $status_class = 'warning';
+                                                    break;
+                                                case 'Izin':
+                                                case 'Sakit':
+                                                    $status_class = 'info';
+                                                    break;
+                                                default:
+                                                    $status_class = 'danger';
                                             }
-                                        ?>
+                                            ?>
                                             <span class="badge badge-<?= $status_class ?>">
                                                 <?= htmlspecialchars($status_manual) ?>
                                             </span>
@@ -398,15 +400,7 @@ include '../../templates/sidebar.php';
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<?php include '../../templates/scripts.php'; ?>
-
-<!-- Chart.js -->
-<script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.min.js"></script>
+<?php include '../../templates/layout_end.php'; ?>
 
 <script>
 // Initialize charts when page loads
@@ -452,7 +446,3 @@ document.addEventListener('DOMContentLoaded', function() {
         window.enhancedCharts.createAttendanceTrendChart('attendanceTrendChart', trendData);
     }
 });
-</script>
-
-</body>
-</html> 

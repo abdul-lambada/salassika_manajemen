@@ -1,4 +1,7 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($title)) { $title = 'Dashboard'; }
 $BASE = defined('APP_URL') ? APP_URL : '';
 // Auto derive $active_page if not set

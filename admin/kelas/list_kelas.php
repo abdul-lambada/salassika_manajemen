@@ -1,19 +1,20 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
     exit;
 }
+include '../../includes/db.php';
 $title = "List Kelas";
 $active_page = "list_kelas";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
 // Pagination: retrieve current page and set limit
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 10;
 $offset = ($page - 1) * $limit;
 // Ambil data Kelas dengan pagination
-include '../../includes/db.php';
 $stmt = $conn->prepare("
     SELECT k.*, j.nama_jurusan 
     FROM kelas k 
@@ -53,10 +54,8 @@ switch ($status) {
         $alert_class = '';
         break;
 }
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">List Kelas</h1> -->
             <?php if (!empty($message)): ?>
@@ -151,20 +150,13 @@ switch ($status) {
                                             <span class="page-link">Next</span>
                                         </li>
                                     <?php endif; ?>
-                                </ul>
                             </nav>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-    <!-- jQuery -->
-    <script src="../../assets/vendor/jquery/jquery.min.js"></script>
-    <!-- Bootstrap core JavaScript-->
-    <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script>
+<?php include '../../templates/layout_end.php'; ?>
+<script>
     $(document).ready(function() {
         var namaKelasHapus = $('#namaKelasHapus');
         var btnHapusKelas = $('#btnHapusKelas');
@@ -176,5 +168,4 @@ switch ($status) {
             btnHapusKelas.attr('href', link);
         });
     });
-    </script>
-</div>
+</script>

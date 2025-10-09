@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Load configs and production settings
 if (file_exists(__DIR__ . '/../../includes/config.php')) {
     include __DIR__ . '/../../includes/config.php';
@@ -7,17 +9,15 @@ if (file_exists(__DIR__ . '/../../includes/config.php')) {
 if (file_exists(__DIR__ . '/../../config/production.php')) {
     include __DIR__ . '/../../config/production.php';
 }
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../../auth/login.php');
-    }
+if (!isset($_SESSION['user'])) {
+    $login = defined('APP_URL') ? APP_URL . '/auth/login.php' : '../../auth/login.php';
+    header('Location: ' . $login);
     exit;
 }
 include '../../includes/db.php';
 $title = "Manajemen Device Fingerprint";
 $active_page = 'manage_devices';
+$required_role = 'admin';
 $message = '';
 $alert_class = '';
 
@@ -97,12 +97,8 @@ try {
 $stmt = $conn->query("SELECT * FROM fingerprint_devices ORDER BY id DESC");
 $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Manajemen Device Fingerprint</h1> -->
             <?php if ($message): ?>
@@ -185,15 +181,9 @@ include '../../templates/sidebar.php';
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-<?php include '../../templates/scripts.php'; ?>
-</body>
-</html> 
+<?php include '../../templates/layout_end.php'; ?>

@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Load config and production settings
 if (file_exists(__DIR__ . '/../includes/config.php')) {
     include __DIR__ . '/../includes/config.php';
@@ -10,30 +12,9 @@ if (file_exists(__DIR__ . '/../config/production.php')) {
 include __DIR__ . '/../includes/db.php';
 $title = "Dashboard Admin";
 $active_page = "dashboard";
-
-// Check if user is logged in
-if (!isset($_SESSION['user'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
-
-// Check if user has valid role
-$role = $_SESSION['user']['role'];
-if (!in_array($role, ['admin', 'guru'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
-
-include __DIR__ . '/../templates/header.php';
-include __DIR__ . '/../templates/sidebar.php';
+$required_role = null; // allow admin & guru
+include __DIR__ . '/../templates/layout_start.php';
+$role = strtolower($_SESSION['user']['role'] ?? '');
 
 // Monitoring status sinkronisasi fingerprint
 $log_file = __DIR__ . '/../logs/cron_sync.log';
@@ -55,10 +36,6 @@ if (file_exists($log_file)) {
 }
 ?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include __DIR__ . '/../templates/navbar.php'; ?>
-        
         <div class="container-fluid">
             <!-- Page Heading -->
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
@@ -283,8 +260,7 @@ if ($role === 'admin') {
         </div>
     </div>
     
-    <?php include __DIR__ . '/../templates/footer.php'; ?>
-</div>
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {
@@ -320,8 +296,3 @@ var absensiChart = new Chart(ctx, {
 });
 </script>
 <?php endif; ?>
-
-<?php include __DIR__ . '/../templates/scripts.php'; ?>
-
-</body>
-</html>

@@ -1,4 +1,11 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
+    exit;
+}
 include '../../includes/db.php';
 if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
     require_once '../../vendor/autoload.php';
@@ -44,8 +51,8 @@ if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
 use PhpOffice\PhpSpreadsheet\IOFactory;
 $title = "List Guru";
 $active_page = "list_guru"; // Untuk menandai menu aktif di sidebar
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
+include '../../templates/layout_start.php';
 
 // Pagination
 $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -104,9 +111,6 @@ if (isset($_GET['msg'])) {
     $alert_class = (isset($_GET['status']) && $_GET['status'] === 'import_warning') ? 'alert-warning' : 'alert-success';
 }
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">List Guru</h1> -->
             <?php if (!empty($message)): ?>
@@ -227,23 +231,4 @@ if (isset($_GET['msg'])) {
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-    <?php include '../../templates/scripts.php'; ?>
-    <script>
-    $(document).ready(function() {
-        var namaGuruHapus = $('#namaGuruHapus');
-        var btnHapusGuru = $('#btnHapusGuru');
-        var linkHapusGuru = $('#linkHapusGuru');
-        $('.btn-hapus-guru').on('click', function() {
-            var id = $(this).data('id');
-            var nama = $(this).data('nama');
-            var link = 'hapus_guru.php?id=' + encodeURIComponent(id);
-            namaGuruHapus.text(nama);
-            btnHapusGuru.attr('href', link);
-            // linkHapusGuru.html('<small>Link: <a href="' + link + '">' + link + '</a></small>');
-        });
-    });
-    </script>
-</div>
+<?php include '../../templates/layout_end.php'; ?>

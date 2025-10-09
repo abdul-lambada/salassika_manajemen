@@ -1,13 +1,14 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
     exit;
 }
 $title = "Kelola Pengguna Fingerprint";
 $active_page = 'manage_devices';
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
 require '../../includes/zklib/zklibrary.php';
 include '../../includes/db.php';
 
@@ -286,10 +287,8 @@ $uid_available = array_diff($all_uid, $uid_used);
 $device_stmt = $conn->query("SELECT * FROM fingerprint_devices WHERE is_active = 1 ORDER BY nama_lokasi, ip");
 $device_list = $device_stmt->fetchAll(PDO::FETCH_ASSOC);
 $tab = isset($_GET['tab']) ? $_GET['tab'] : 'kelola';
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <?php if (!empty($message)): ?>
                 <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
@@ -524,15 +523,7 @@ $tab = isset($_GET['tab']) ? $_GET['tab'] : 'kelola';
                     </div>
                 </div>
             <?php endif; ?>
-        </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<!-- jQuery -->
-<script src="../../assets/vendor/jquery/jquery.min.js"></script>
-<!-- Bootstrap core JavaScript-->
-<script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<?php include '../../templates/layout_end.php'; ?>
 <script>
 $(function () {
   $('#fingerprintTab a[data-toggle="tab"]').on('click', function (e) {

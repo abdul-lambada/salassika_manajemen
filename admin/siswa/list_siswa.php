@@ -1,4 +1,15 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+if (strtolower($_SESSION['user']['role'] ?? '') !== 'admin') {
+    header('Location: ../../auth/login.php');
+    exit;
+}
 include '../../includes/db.php';
 if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
     require_once '../../vendor/autoload.php';
@@ -48,9 +59,8 @@ if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
 use PhpOffice\PhpSpreadsheet\IOFactory;
 $title = "List Siswa";
 $active_page = "list_siswa";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-// include '../../templates/navbar.php';
+$required_role = 'admin';
+include '../../templates/layout_start.php';
 
 // Konfigurasi pagination
 $limit = 10;
@@ -247,14 +257,4 @@ if (isset($_GET['msg'])) {
         </div>
     </div>
     
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<!-- JS SB Admin -->
-<script src="../../assets/vendor/jquery/jquery.min.js"></script>
-<script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-<script src="../../assets/vendor/jquery-easing/jquery.easing.min.js"></script>
-<script src="../../assets/js/sb-admin-2.min.js"></script>
-
-</body>
-</html>
+    <?php include '../../templates/layout_end.php'; ?>

@@ -1,13 +1,14 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
     exit;
 }
 $title = "List Users";
 $active_page = "list_users"; // Untuk menandai menu aktif di sidebar
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
 
 // Koneksi ke database
 include '../../includes/db.php';
@@ -54,10 +55,8 @@ switch ($status) {
         $alert_class = '';
         break;
 }
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- Begin Alert SB Admin 2 -->
             <?php if (!empty($message)): ?>
@@ -163,15 +162,7 @@ switch ($status) {
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<!-- jQuery -->
-<script src="../../assets/vendor/jquery/jquery.min.js"></script>
-<!-- Bootstrap core JavaScript-->
-<script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<?php include '../../templates/layout_end.php'; ?>
 <script>
 $(document).ready(function() {
     var namaUserHapus = $('#namaUserHapus');

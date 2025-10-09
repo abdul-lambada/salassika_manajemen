@@ -1,5 +1,7 @@
 <?php
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 // Load configs
 if (file_exists(__DIR__ . '/../includes/config.php')) {
     include __DIR__ . '/../includes/config.php';
@@ -11,15 +13,8 @@ include '../includes/db.php';
 include '../includes/process_fingerprint_attendance.php';
 $title = "Sinkronisasi Absensi";
 $active_page = "jalankan_sinkronisasi";
-
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$required_role = 'admin';
+include __DIR__ . '/../templates/layout_start.php';
 
 $output_message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_sync'])) {
@@ -42,13 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_sync'])) {
     $output_message .= nl2br(htmlspecialchars(processFingerprintAttendance()));
 }
 
-include '../templates/header.php';
-include '../templates/sidebar.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Sinkronisasi Data Absensi Fingerprint</h1> -->
 
@@ -72,7 +61,6 @@ include '../templates/sidebar.php';
                 </div>
             </div>
 
-            <?php if ($output_message): ?>
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
                     <h6 class="m-0 font-weight-bold text-success">Hasil Proses</h6>
@@ -81,13 +69,6 @@ include '../templates/sidebar.php';
                     <pre class="bg-light p-3 rounded"><code><?= $output_message ?></code></pre>
                 </div>
             </div>
-            <?php endif; ?>
-
         </div>
     </div>
-    <?php include __DIR__ . '/../templates/footer.php'; ?>
-</div>
-
-<?php include __DIR__ . '/../templates/scripts.php'; ?>
-</body>
-</html> 
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>

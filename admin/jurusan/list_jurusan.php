@@ -1,13 +1,19 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (!isset($_SESSION['user'])) {
+    header('Location: ../../auth/login.php');
+    exit;
+}
+if (strtolower($_SESSION['user']['role'] ?? '') !== 'admin') {
+    header('Location: ../../auth/login.php');
     exit;
 }
 $title = "List Jurusan";
 $active_page = "list_jurusan"; // Untuk menandai menu aktif di sidebar
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
+include '../../templates/layout_start.php';
 // Pagination: retrieve current page and set limit
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $limit = 10;
@@ -144,27 +150,21 @@ switch ($status) {
                                     <?php endif; ?>
                                 </ul>
                             </nav>
-                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <?php include '../../templates/footer.php'; ?>
-    <!-- jQuery -->
-    <script src="../../assets/vendor/jquery/jquery.min.js"></script>
-    <!-- Bootstrap core JavaScript-->
-    <script src="../../assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script>
+<?php include '../../templates/layout_end.php'; ?>
+<script>
     $(document).ready(function() {
         var namaJurusanHapus = $('#namaJurusanHapus');
         var btnHapusJurusan = $('#btnHapusJurusan');
         $('.btn-hapus-jurusan').on('click', function() {
             var id = $(this).data('id');
-            var nama = $(this).data('nama');
             var link = 'hapus_jurusan.php?id=' + encodeURIComponent(id);
             namaJurusanHapus.text(nama);
             btnHapusJurusan.attr('href', link);
         });
     });
-    </script>
+</script>
