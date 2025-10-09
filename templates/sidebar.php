@@ -1,7 +1,8 @@
 <?php
 $BASE = defined('APP_URL') ? APP_URL : '';
 $active_page = $active_page ?? '';
-$role = $_SESSION['user']['role'] ?? null;
+$roleRaw = $_SESSION['user']['role'] ?? null;
+$role = $roleRaw ? strtolower($roleRaw) : null;
 $is_admin = ($role === 'admin');
 $is_guru = ($role === 'guru');
 $prefix = $BASE . ($is_admin ? '/admin' : ($is_guru ? '/guru' : ''));
@@ -38,31 +39,31 @@ $navActive = function (array $keys) use ($active_page) {
     <?php if ($is_admin): ?>
     <div class="sidebar-heading">Manajemen Data</div>
 
-    <li class="nav-item <?= $navActive(['guru']) ?>">
+    <li class="nav-item <?= $navActive(['guru','list_guru','tambah_guru','edit_guru']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/guru/list_guru.php">
             <i class="fas fa-chalkboard-teacher"></i>
             <span>Data Guru</span>
         </a>
     </li>
-    <li class="nav-item <?= $navActive(['siswa']) ?>">
+    <li class="nav-item <?= $navActive(['siswa','list_siswa','tambah_siswa','edit_siswa']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/siswa/list_siswa.php">
             <i class="fas fa-users"></i>
             <span>Data Siswa</span>
         </a>
     </li>
-    <li class="nav-item <?= $navActive(['jurusan']) ?>">
+    <li class="nav-item <?= $navActive(['jurusan','list_jurusan','tambah_jurusan','edit_jurusan']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/jurusan/list_jurusan.php">
             <i class="fas fa-stream"></i>
             <span>Jurusan</span>
         </a>
     </li>
-    <li class="nav-item <?= $navActive(['kelas']) ?>">
+    <li class="nav-item <?= $navActive(['kelas','list_kelas','tambah_kelas','edit_kelas']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/kelas/list_kelas.php">
             <i class="fas fa-school"></i>
             <span>Kelas</span>
         </a>
     </li>
-    <li class="nav-item <?= $navActive(['users']) ?>">
+    <li class="nav-item <?= $navActive(['users','list_users','tambah_users','edit_users']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/users/list_users.php">
             <i class="fas fa-user-cog"></i>
             <span>Pengguna</span>
@@ -72,7 +73,7 @@ $navActive = function (array $keys) use ($active_page) {
     <hr class="sidebar-divider">
     <div class="sidebar-heading">Fingerprint</div>
 
-    <li class="nav-item <?= $navActive(['fingerprint']) ?>">
+    <li class="nav-item <?= $navActive(['fingerprint','manage_devices']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/fingerprint/manage_devices.php">
             <i class="fas fa-fingerprint"></i>
             <span>Perangkat</span>
@@ -106,7 +107,7 @@ $navActive = function (array $keys) use ($active_page) {
     <hr class="sidebar-divider">
     <div class="sidebar-heading">Laporan & Pengaturan</div>
 
-    <li class="nav-item <?= $navActive(['laporan']) ?>">
+    <li class="nav-item <?= $navActive(['laporan','laporan_absensi']) ?>">
         <a class="nav-link" href="<?= $prefix ?>/laporan/laporan_absensi.php">
             <i class="fas fa-file-alt"></i>
             <span>Laporan Absensi</span>
