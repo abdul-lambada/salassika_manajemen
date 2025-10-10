@@ -1,12 +1,13 @@
 <?php
-session_start();
-include '../../includes/db.php';
-require_once '../../vendor/phpoffice/phpexcel/Classes/PHPExcel.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../vendor/phpoffice/phpexcel/Classes/PHPExcel.php';
 
-// Cek hak akses
-if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'guru'])) {
-    header("HTTP/1.1 403 Forbidden");
-    exit("Anda tidak memiliki akses ke halaman ini.");
+$currentUser = admin_require_auth(['admin', 'guru']);
+
+if (!admin_validate_csrf($_GET['token'] ?? null)) {
+    header("HTTP/1.1 400 Bad Request");
+    exit('Token CSRF tidak valid.');
 }
 
 // Ambil parameter filter dari GET request

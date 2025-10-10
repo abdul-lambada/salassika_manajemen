@@ -1,61 +1,101 @@
 <?php
-session_start();
-// Load global configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
-$active_page = "laporan_guru"; // Untuk menandai menu aktif di sidebar
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
+$currentUser = admin_require_auth(['admin', 'guru']);
+
+$normalizeDateParam = static function (?string $value): string {
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
     }
-    exit;
+
+    $date = DateTime::createFromFormat('Y-m-d', $value);
+    return ($date !== false && $date->format('Y-m-d') === $value) ? $value : '';
+};
+
+$normalizeIdParam = static function (?string $value): string {
+    $value = trim((string) $value);
+    if ($value === '' || !ctype_digit($value)) {
+        return '';
+    }
+
+    return ltrim($value, '0') === '' ? '0' : ltrim($value, '0');
+};
+
+$title = 'Laporan Absensi Guru';
+$active_page = 'laporan_guru';
+$required_role = ($currentUser['role'] ?? '') === 'admin' ? null : 'guru';
+
+$tanggal_awal = $normalizeDateParam($_GET['tanggal_awal'] ?? '');
+$tanggal_akhir = $normalizeDateParam($_GET['tanggal_akhir'] ?? '');
+$id_guru_param = $normalizeIdParam($_GET['id_guru'] ?? '');
+$id_guru = $id_guru_param !== '' ? (int) $id_guru_param : null;
+
+$downloadAction = ($_GET['download'] ?? '') === 'pdf' ? 'pdf' : '';
+
+$downloadParams = array_filter(
+    [
+        'tanggal_awal' => $tanggal_awal,
+        'tanggal_akhir' => $tanggal_akhir,
+        'id_guru' => $id_guru_param,
+        'download' => 'pdf',
+    ],
+    static function ($value) {
+        return $value !== '' && $value !== null;
+    }
+);
+$downloadQuery = http_build_query($downloadParams);
+
+$guru_list = [];
+$laporan_list = [];
+$error_message = '';
+
+try {
+    $stmtGuru = $conn->query('SELECT id_guru, nama_guru FROM guru ORDER BY nama_guru');
+    $guru_list = $stmtGuru->fetchAll(PDO::FETCH_ASSOC);
+
+    $sql = "
+        SELECT
+            ag.tanggal,
+            g.nama_guru,
+            g.nip,
+            ag.status_kehadiran,
+            ag.catatan,
+            COALESCE(kh.timestamp, '') AS waktu_fingerprint,
+            COALESCE(kh.verification_mode, '') AS mode_verifikasi
+        FROM absensi_guru ag
+        JOIN guru g ON ag.id_guru = g.id_guru
+        LEFT JOIN users u ON g.user_id = u.id
+        LEFT JOIN tbl_kehadiran kh ON u.id = kh.user_id AND DATE(kh.timestamp) = ag.tanggal
+        WHERE 1 = 1
+    ";
+
+    $params = [];
+
+    if ($tanggal_awal !== '' && $tanggal_akhir !== '') {
+        $sql .= ' AND ag.tanggal BETWEEN :tanggal_awal AND :tanggal_akhir';
+        $params[':tanggal_awal'] = $tanggal_awal;
+        $params[':tanggal_akhir'] = $tanggal_akhir;
+    }
+
+    if ($id_guru !== null) {
+        $sql .= ' AND ag.id_guru = :id_guru';
+        $params[':id_guru'] = $id_guru;
+    }
+
+    $sql .= ' ORDER BY ag.tanggal DESC, g.nama_guru ASC';
+
+    $stmtLaporan = $conn->prepare($sql);
+    $stmtLaporan->execute($params);
+    $laporan_list = $stmtLaporan->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    admin_log_message('laporan_guru_errors.log', 'Database error: ' . $e->getMessage(), 'ERROR');
+    $error_message = 'Terjadi kesalahan saat mengambil data laporan absensi guru.';
 }
 
-// Filter berdasarkan tanggal
-$tanggal_awal = isset($_GET['tanggal_awal']) ? $_GET['tanggal_awal'] : '';
-$tanggal_akhir = isset($_GET['tanggal_akhir']) ? $_GET['tanggal_akhir'] : '';
-
-// Query untuk mengambil data absensi guru
-$query = "
-    SELECT 
-        ag.id_absensi_guru,
-        ag.tanggal, 
-        g.nama_guru, 
-        g.nip, 
-        g.jenis_kelamin, 
-        ag.status_kehadiran AS status_kehadiran,
-        ag.catatan
-    FROM absensi_guru ag
-    JOIN guru g ON ag.id_guru = g.id_guru
-    WHERE 1=1
-";
-
-$params = [];
-if (!empty($tanggal_awal) && !empty($tanggal_akhir)) {
-    $query .= " AND ag.tanggal BETWEEN :tanggal_awal AND :tanggal_akhir";
-    $params[':tanggal_awal'] = $tanggal_awal;
-    $params[':tanggal_akhir'] = $tanggal_akhir;
-}
-
-$query .= " ORDER BY ag.tanggal DESC";
-
-$stmt_absensi = $conn->prepare($query);
-$stmt_absensi->execute($params);
-$absensi_list = $stmt_absensi->fetchAll(PDO::FETCH_ASSOC);
-
-// Tombol Download Laporan
-if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
-    // Check if we can find FPDF in different locations
-    $fpdf_paths = [
+if ($downloadAction === 'pdf') {
+    $fpdfPaths = [
         '../vendor/fpdf/fpdf.php',
         '../fpdf/fpdf.php',
         '../lib/fpdf/fpdf.php',
@@ -63,108 +103,91 @@ if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
         '../assets/vendor/fpdf/fpdf.php'
     ];
 
-    $fpdf_found = false;
-    foreach ($fpdf_paths as $path) {
+    $fpdfFound = false;
+    foreach ($fpdfPaths as $path) {
         if (file_exists($path)) {
-            require($path);
-            $fpdf_found = true;
+            require $path;
+            $fpdfFound = true;
             break;
         }
     }
 
-    if (!$fpdf_found) {
-        echo "FPDF library not found. Please install FPDF or correct the path.";
+    if (!$fpdfFound) {
+        echo 'FPDF library not found. Please install FPDF or correct the path.';
         echo "<br><a href='laporan_guru.php'>Back to Report</a>";
         exit;
     }
 
-    // Inisialisasi FPDF
     class PDF extends FPDF
     {
-        // Kop Surat
-        function Header()
+        public function Header()
         {
-            // Logo
-            $logo_path = '../../assets/img/logo.jpg';
-            if (file_exists($logo_path)) {
-                $this->Image($logo_path, 10, 10, 20); // Logo sekolah
-            } else {
-                $this->SetFont('Arial', 'I', 10);
-                $this->Cell(0, 5, 'Logo not found', 0, 1, 'L');
+            $logoPath = '../../assets/img/logo.jpg';
+            if (file_exists($logoPath)) {
+                $this->Image($logoPath, 10, 10, 20);
             }
-            // Judul Laporan
+
             $this->SetFont('Arial', 'B', 14);
-            $this->Cell(0, 5, 'YAYAN ISLAM AL-AMIIN', 0, 1, 'C');
-            // $this->Cell(0, 5, 'DINAS PENDIDIKAN', 0, 1, 'C');
+            $this->Cell(0, 5, 'YAYASAN ISLAM AL-AMIIN', 0, 1, 'C');
             $this->Cell(0, 5, 'SMK AL-AMIIN SANGKANHURIP', 0, 1, 'C');
             $this->SetFont('Arial', '', 10);
             $this->Cell(0, 5, 'Jl. Cibiru No. 01 Desa Sangkanhurip Kecamatan Sindang Kabupaten Majalengka 45471', 0, 1, 'C');
             $this->Cell(0, 5, 'Website: www.smkalamiin.sch.id | E-mail: smkalamiin.sch@gmail.com | Telp: 0233-8514332', 0, 1, 'C');
             $this->Ln(10);
-            // Garis pemisah
             $this->SetLineWidth(0.5);
             $this->Line(10, 35, 200, 35);
             $this->Ln(10);
-            // Judul Laporan
             $this->SetFont('Arial', 'B', 14);
             $this->Cell(0, 10, 'LAPORAN ABSENSI GURU', 0, 1, 'C');
             $this->Ln(5);
         }
 
-        // Footer
-        function Footer()
+        public function Footer()
         {
             $this->SetY(-15);
             $this->SetFont('Arial', 'I', 8);
             $this->Cell(0, 10, 'Halaman ' . $this->PageNo(), 0, 0, 'C');
         }
 
-        // Tabel Laporan
-        function FancyTable($header, $data)
+        public function FancyTable(array $header, array $data): void
         {
-            // Margin kiri dan kanan
-            $margin_left = 10;
-            $margin_right = 10;
+            $marginLeft = 10;
+            $marginRight = 10;
+            $pageWidth = 210 - $marginLeft - $marginRight;
+            $columnWidths = [
+                $pageWidth * 0.16,
+                $pageWidth * 0.24,
+                $pageWidth * 0.15,
+                $pageWidth * 0.2,
+                $pageWidth * 0.25,
+            ];
 
-            // Total lebar halaman (A4 = 210 mm)
-            $page_width = 210 - $margin_left - $margin_right;
-
-            // Hitung lebar kolom otomatis berdasarkan jumlah kolom
-            $num_columns = count($header);
-            $column_width = $page_width / $num_columns;
-
-            // Warna header
             $this->SetFillColor(230, 230, 230);
             $this->SetTextColor(0);
             $this->SetDrawColor(128, 128, 128);
             $this->SetLineWidth(0.3);
             $this->SetFont('Arial', 'B', 10);
 
-            // Cetak header
-            foreach ($header as $col) {
-                $this->Cell($column_width, 10, $col, 1, 0, 'C', true);
+            foreach ($header as $index => $col) {
+                $this->Cell($columnWidths[$index], 10, $col, 1, 0, 'C', true);
             }
             $this->Ln();
 
-            // Warna baris
             $this->SetFillColor(245, 245, 245);
             $this->SetTextColor(0);
             $this->SetFont('Arial', '', 10);
 
-            // Data
             $fill = false;
             foreach ($data as $row) {
-                $this->Cell($column_width, 10, $row['tanggal'], 1, 0, 'C', $fill);
-                $this->Cell($column_width, 10, $row['nama_guru'], 1, 0, 'L', $fill);
-                $this->Cell($column_width, 10, $row['nip'], 1, 0, 'C', $fill);
-                $this->Cell($column_width, 10, $row['jenis_kelamin'], 1, 0, 'C', $fill);
-                $this->Cell($column_width, 10, $row['status_kehadiran'], 1, 0, 'C', $fill);
+                $this->Cell($columnWidths[0], 10, $row['tanggal'], 1, 0, 'C', $fill);
+                $this->Cell($columnWidths[1], 10, $row['nama_guru'], 1, 0, 'L', $fill);
+                $this->Cell($columnWidths[2], 10, $row['status_kehadiran'], 1, 0, 'C', $fill);
+                $this->Cell($columnWidths[3], 10, $row['waktu_fingerprint'], 1, 0, 'C', $fill);
 
-                // Untuk kolom "Catatan", gunakan MultiCell jika teks panjang
                 $x = $this->GetX();
                 $y = $this->GetY();
-                $this->MultiCell($column_width, 10, $row['catatan'], 1, 'L', $fill);
-                $this->SetXY($x + $column_width, $y);
+                $this->MultiCell($columnWidths[4], 10, $row['catatan'], 1, 'L', $fill);
+                $this->SetXY($x + $columnWidths[4], $y);
 
                 $fill = !$fill;
                 $this->Ln();
@@ -172,111 +195,146 @@ if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
         }
     }
 
-    // Inisialisasi objek PDF
     $pdf = new PDF();
     $pdf->AddPage();
-    $pdf->SetFont('Times', '', 10);
+    $pdf->SetFont('Arial', '', 10);
 
-    // Filter tanggal (opsional)
-    if (!empty($tanggal_awal) && !empty($tanggal_akhir)) {
+    if ($tanggal_awal !== '' && $tanggal_akhir !== '') {
         $pdf->Cell(0, 10, 'Periode: ' . $tanggal_awal . ' s/d ' . $tanggal_akhir, 0, 1, 'L');
         $pdf->Ln(5);
     }
 
-    // Header tabel
-    $header = ['Tanggal', 'Nama Guru', 'NIP', 'Jenis Kelamin', 'Status', 'Catatan'];
+    if ($id_guru !== null) {
+        $selectedGuru = array_values(array_filter($guru_list, static function ($guru) use ($id_guru) {
+            return (int) ($guru['id_guru'] ?? 0) === $id_guru;
+        }));
+        $guruName = $selectedGuru[0]['nama_guru'] ?? '';
+        if ($guruName !== '') {
+            $pdf->Cell(0, 8, 'Guru: ' . $guruName, 0, 1, 'L');
+        }
+    }
 
-    // Data absensi
-    $pdf->FancyTable($header, $absensi_list);
+    $pdfData = array_map(static function ($row) {
+        return [
+            'tanggal' => $row['tanggal'] ?? '',
+            'nama_guru' => $row['nama_guru'] ?? '',
+            'status_kehadiran' => $row['status_kehadiran'] ?? '',
+            'waktu_fingerprint' => $row['waktu_fingerprint'] ?? '',
+            'catatan' => $row['catatan'] ?? '',
+        ];
+    }, $laporan_list);
 
-    // Bersihkan buffer output
+    $header = ['Tanggal', 'Nama Guru', 'Status', 'Fingerprint', 'Catatan'];
+    $pdf->FancyTable($header, $pdfData);
+
     if (ob_get_length()) {
         ob_end_clean();
     }
 
-    // Output file PDF
-    $pdf->Output('D', 'laporan_absensi_guru.pdf'); // Gunakan 'D' untuk memaksa unduhan
+    $pdf->Output('D', 'laporan_absensi_guru.pdf');
     exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
+<?php include __DIR__ . '/../templates/layout_start.php'; ?>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-12">
+                    <?php if ($error_message !== ''): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?= htmlspecialchars($error_message, ENT_QUOTES, 'UTF-8'); ?>
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    <?php endif; ?>
 
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Laporan Absensi Guru - Management Salassika</title>
-    <link rel="icon" type="image/jpeg" href="../assets/img/logo.jpg">
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-</head>
-
-<body id="page-top">
-    <?php include __DIR__ . '/../templates/header.php'; ?>
-    <?php include __DIR__ . '/../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            <?php include __DIR__ . '/../templates/navbar.php'; ?>
-            
-            <div class="container-fluid">
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Guru</h6>
-                            </div>
-                            <div class="card-body">
-                                <form method="GET" action="">
-                                    <!-- Filter Tanggal -->
-                                    <label>Tanggal Awal:</label>
-                                    <input type="date" name="tanggal_awal" class="form-control" value="<?php echo htmlspecialchars($tanggal_awal); ?>"><br>
-
-                                    <label>Tanggal Akhir:</label>
-                                    <input type="date" name="tanggal_akhir" class="form-control" value="<?php echo htmlspecialchars($tanggal_akhir); ?>"><br>
-
-                                    <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
-                                    <a href="?<?php echo http_build_query($_GET); ?>&download=pdf" class="btn btn-danger">Download PDF</a>
-                                </form>
-                            </div>
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Guru</h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="GET" action="">
+                                <div class="form-row">
+                                    <div class="form-group col-md-4">
+                                        <label for="tanggal_awal">Tanggal Awal</label>
+                                        <input type="date" name="tanggal_awal" id="tanggal_awal" class="form-control" value="<?= htmlspecialchars($tanggal_awal, ENT_QUOTES, 'UTF-8'); ?>">
+                                    </div>
+                                    <div class="form-group col-md-4">
+                                        <label for="tanggal_akhir">Tanggal Akhir</label>
+                                        <input type="date" name="tanggal_akhir" id="tanggal_akhir" class="form-control" value="<?= htmlspecialchars($tanggal_akhir, ENT_QUOTES, 'UTF-8'); ?>">
+                                    </div>
+                                    <div class="form-group col-md-4">
+                                        <label for="id_guru">Guru</label>
+                                        <select name="id_guru" id="id_guru" class="form-control">
+                                            <option value="">-- Semua Guru --</option>
+                                            <?php foreach ($guru_list as $guru): ?>
+                                                <?php $guruId = (string) ($guru['id_guru'] ?? ''); ?>
+                                                <option value="<?= htmlspecialchars($guruId, ENT_QUOTES, 'UTF-8'); ?>" <?= ((string) $id_guru === $guruId) ? 'selected' : ''; ?>>
+                                                    <?= htmlspecialchars($guru['nama_guru'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
+                                        <a href="?<?= htmlspecialchars($downloadQuery, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-danger">Download PDF</a>
+                                    </div>
+                                    <a href="laporan_guru.php" class="btn btn-secondary">Reset</a>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Tabel Laporan Absensi -->
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Guru</h6>
-                            </div>
-                            <div class="card-body">
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Guru</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
                                 <table class="table table-bordered table-responsive-sm">
-                                    <thead>
+                                    <thead class="thead-light">
                                         <tr>
                                             <th>Tanggal</th>
                                             <th>Nama Guru</th>
                                             <th>NIP</th>
-                                            <th>Jenis Kelamin</th>
                                             <th>Status Kehadiran</th>
+                                            <th>Fingerprint</th>
                                             <th>Catatan</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php if (!empty($absensi_list)): ?>
-                                            <?php foreach ($absensi_list as $absensi): ?>
+                                        <?php if (!empty($laporan_list)): ?>
+                                            <?php foreach ($laporan_list as $laporan): ?>
                                                 <tr>
-                                                    <td><?php echo htmlspecialchars($absensi['tanggal']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['nama_guru']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['nip']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['jenis_kelamin']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['status_kehadiran']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['catatan']); ?></td>
+                                                    <td><?= htmlspecialchars($laporan['tanggal'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+                                                    <td><?= htmlspecialchars($laporan['nama_guru'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+                                                    <td><?= htmlspecialchars($laporan['nip'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+                                                    <td><?= htmlspecialchars($laporan['status_kehadiran'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
+                                                    <td>
+                                                        <?php if (!empty($laporan['waktu_fingerprint'])): ?>
+                                                            <span class="badge badge-success">
+                                                                <?= htmlspecialchars(date('H:i', strtotime($laporan['waktu_fingerprint'])), ENT_QUOTES, 'UTF-8'); ?>
+                                                            </span>
+                                                            <br>
+                                                            <small class="text-muted">
+                                                                <?= htmlspecialchars($laporan['mode_verifikasi'] ?? '', ENT_QUOTES, 'UTF-8'); ?>
+                                                            </small>
+                                                        <?php else: ?>
+                                                            <span class="text-muted">-</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td><?= htmlspecialchars($laporan['catatan'] ?? '', ENT_QUOTES, 'UTF-8'); ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         <?php else: ?>
                                             <tr>
-                                                <td colspan="6" class="text-center">Tidak ada data absensi.</td>
+                                                <td colspan="6" class="text-center text-muted">Tidak ada data absensi guru untuk filter ini.</td>
                                             </tr>
                                         <?php endif; ?>
                                     </tbody>
@@ -287,8 +345,4 @@ if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
                 </div>
             </div>
         </div>
-        <?php include __DIR__ . '/../templates/footer.php'; ?>
-    </div>
-</body>
-
-</html>
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>

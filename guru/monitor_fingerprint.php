@@ -1,40 +1,31 @@
 <?php
-session_start();
-// Load global configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'guru') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$currentUser = admin_require_auth(['admin', 'guru']);
 
-$active_page = "monitor_fingerprint";
-$message = '';
+$title = 'Monitor Fingerprint';
+$active_page = 'monitor_fingerprint';
+$required_role = ($currentUser['role'] ?? '') === 'admin' ? null : 'guru';
+$error_message = '';
 
 try {
     // Ambil statistik fingerprint hari ini
-    $stmt_stats = $conn->prepare("
-        SELECT 
-            COUNT(*) as total_absensi,
-            COUNT(DISTINCT user_id) as total_user,
-            MIN(timestamp) as absen_pertama,
-            MAX(timestamp) as absen_terakhir
-        FROM tbl_kehadiran 
-        WHERE DATE(timestamp) = CURDATE()
-    ");
+    $stmt_stats = $conn->prepare(
+        "SELECT COUNT(*) as total_absensi,
+                COUNT(DISTINCT user_id) as total_user,
+                MIN(timestamp) as absen_pertama,
+                MAX(timestamp) as absen_terakhir
+         FROM tbl_kehadiran
+         WHERE DATE(timestamp) = CURDATE()"
+    );
     $stmt_stats->execute();
-    $fingerprint_stats = $stmt_stats->fetch(PDO::FETCH_ASSOC);
+    $fingerprint_stats = $stmt_stats->fetch(PDO::FETCH_ASSOC) ?: [
+        'total_absensi' => 0,
+        'total_user' => 0,
+        'absen_pertama' => null,
+        'absen_terakhir' => null,
+    ];
 
     // Ambil data absensi fingerprint hari ini
     $stmt_today = $conn->prepare("
@@ -96,18 +87,7 @@ try {
     $error_message = "Error: " . $e->getMessage();
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Monitor Fingerprint - Management Salassika</title>
-    <link rel="icon" type="image/jpeg" href="../assets/img/logo.jpg">
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-    <script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/vendor/chart.js/Chart.min.js"></script>
+<?php include __DIR__ . '/../templates/layout_start.php'; ?>
     <style>
         .fingerprint-badge {
             background-color: #007bff;
@@ -163,267 +143,24 @@ try {
             70% {
                 transform: scale(1);
                 box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
-            }
-            100% {
                 transform: scale(0.95);
                 box-shadow: 0 0 0 0 rgba(40, 167, 69, 0);
             }
         }
     </style>
-</head>
+    <div class="container-fluid">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+            <!-- <h1 class="h3 mb-0 font-weight-bold text-gray-800">Monitor Fingerprint</h1> -->
+            <span class="badge badge-pill badge-success d-flex align-items-center px-3 py-2 pulsing-badge" style="font-size: 1rem;">
+                <i class="fas fa-circle mr-2" style="font-size: 0.8rem;"></i>
+                Real-time
+            </span>
 
-<body id="page-top">
-    <?php include __DIR__ . '/../templates/header.php'; ?>
-    <?php include __DIR__ . '/../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            
-            <?php include __DIR__ . '/../templates/navbar.php'; ?>
-            <div class="container-fluid">
-                <div class="d-flex align-items-center justify-content-between mb-4">
-                    <!-- <h1 class="h3 mb-0 font-weight-bold text-gray-800">Monitor Fingerprint</h1> -->
-                    <span class="badge badge-pill badge-success d-flex align-items-center px-3 py-2 pulsing-badge" style="font-size: 1rem;">
-                        <i class="fas fa-circle mr-2" style="font-size: 0.8rem;"></i>
-                        Real-time
-                    </span>
-                </div>
-
-                <!-- Statistik Fingerprint -->
-                <div class="row mb-4">
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-primary shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                            Total Absensi Hari Ini</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $fingerprint_stats['total_absensi']; ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-fingerprint fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-success shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                            Total User</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $fingerprint_stats['total_user']; ?></div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-users fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-info shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                            Absen Pertama</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?php echo $fingerprint_stats['absen_pertama'] ? date('H:i', strtotime($fingerprint_stats['absen_pertama'])) : '-'; ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-sun fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-xl-3 col-md-6 mb-4">
-                        <div class="card border-left-warning shadow h-100 py-2">
-                            <div class="card-body">
-                                <div class="row no-gutters align-items-center">
-                                    <div class="col mr-2">
-                                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                            Absen Terakhir</div>
-                                        <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                            <?php echo $fingerprint_stats['absen_terakhir'] ? date('H:i', strtotime($fingerprint_stats['absen_terakhir'])) : '-'; ?>
-                                        </div>
-                                    </div>
-                                    <div class="col-auto">
-                                        <i class="fas fa-moon fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row">
-                    <!-- Grafik Absensi per Jam -->
-                    <div class="col-xl-6 col-lg-6">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Absensi per Jam</h6>
-                            </div>
-                            <div class="card-body">
-                                <canvas id="hourlyChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Siswa yang Belum Absen -->
-                    <div class="col-xl-6 col-lg-6">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Siswa Belum Absen</h6>
-                            </div>
-                            <div class="card-body">
-                                <?php if (!empty($missing_students)): ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Nama</th>
-                                                    <th>NIS</th>
-                                                    <th>Kelas</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($missing_students as $student): ?>
-                                                    <tr>
-                                                        <td><?php echo htmlspecialchars($student['nama_siswa']); ?></td>
-                                                        <td><?php echo htmlspecialchars($student['nis']); ?></td>
-                                                        <td><?php echo htmlspecialchars($student['nama_kelas']); ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php else: ?>
-                                    <p class="text-center text-success">
-                                        <i class="fas fa-check-circle"></i> Semua siswa sudah absen!
-                                    </p>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Absensi Real-time -->
-                <div class="card shadow mb-4">
-                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                        <h6 class="m-0 font-weight-bold text-primary">Absensi Real-time Hari Ini</h6>
-                        <button class="btn btn-sm btn-primary" onclick="location.reload()">
-                            <i class="fas fa-sync-alt"></i> Refresh
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <?php if (!empty($absensi_today)): ?>
-                            <div class="table-responsive">
-                                <table class="table table-bordered table-hover">
-                                    <thead class="thead-light">
-                                        <tr>
-                                            <th>Waktu</th>
-                                            <th>Nama</th>
-                                            <th>Tipe</th>
-                                            <th>ID</th>
-                                            <th>Kelas</th>
-                                            <th>Mode</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($absensi_today as $absensi): ?>
-                                            <tr>
-                                                <td>
-                                                    <strong><?php echo date('H:i:s', strtotime($absensi['timestamp'])); ?></strong>
-                                                    <br>
-                                                    <small class="text-muted"><?php echo date('d/m/Y', strtotime($absensi['timestamp'])); ?></small>
-                                                </td>
-                                                <td><?php echo htmlspecialchars($absensi['nama_user']); ?></td>
-                                                <td>
-                                                    <span class="badge badge-<?php echo $absensi['tipe_user'] == 'Siswa' ? 'primary' : 'info'; ?>">
-                                                        <?php echo htmlspecialchars($absensi['tipe_user']); ?>
-                                                    </span>
-                                                </td>
-                                                <td><?php echo htmlspecialchars($absensi['nomor_id']); ?></td>
-                                                <td><?php echo htmlspecialchars($absensi['kelas'] ?: '-'); ?></td>
-                                                <td>
-                                                    <span class="fingerprint-badge">
-                                                        <?php echo htmlspecialchars($absensi['verification_mode']); ?>
-                                                    </span>
-                                                </td>
-                                                <td>
-                                                    <span class="status-<?php echo $absensi['status'] == 'SUCCESS' ? 'success' : 'danger'; ?>">
-                                                        <?php echo htmlspecialchars($absensi['status']); ?>
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        <?php else: ?>
-                            <p class="text-center text-muted">Belum ada data absensi fingerprint hari ini</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php include __DIR__ . '/../templates/footer.php'; ?>
-    </div>
-
-    <script>
-        // Grafik absensi per jam
-        var ctx = document.getElementById('hourlyChart').getContext('2d');
-        var hourlyChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: [
-                    <?php
-                    $labels = [];
-                    $data = [];
-                    for ($i = 0; $i < 24; $i++) {
-                        $labels[] = "'" . sprintf('%02d:00', $i) . "'";
-                        $data[] = 0;
-                    }
-                    foreach ($hourly_stats as $stat) {
-                        $data[$stat['jam']] = $stat['jumlah'];
-                    }
-                    echo implode(',', $labels);
-                    ?>
-                ],
-                datasets: [{
-                    label: 'Jumlah Absensi',
-                    data: [<?php echo implode(',', $data); ?>],
-                    backgroundColor: 'rgba(78, 115, 223, 0.5)',
-                    borderColor: 'rgba(78, 115, 223, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
-                }
-            }
-        });
-
+        <!-- Statistik Fingerprint -->
+        <div class="row mb-4">
+{{ ... }}
         // Auto refresh setiap 30 detik
         setInterval(function() {
             location.reload();
         }, 30000);
     </script>
-</body>
-
-</html>

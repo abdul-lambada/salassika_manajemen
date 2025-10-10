@@ -1,31 +1,14 @@
 <?php
-session_start();
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/wa_util.php';
 
-// Load global configs
-if (file_exists(__DIR__ . '/../../includes/config.php')) {
-    include __DIR__ . '/../../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../../config/production.php')) {
-    include __DIR__ . '/../../config/production.php';
-}
+$currentUser = admin_require_auth(['admin']);
 
 $title = "Konfigurasi WhatsApp";
 $active_page = "whatsapp_config";
-
-// Check if user is logged in and has admin role BEFORE rendering templates
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../../auth/login.php');
-    }
-    exit;
-}
-
-include '../../includes/db.php';
-require_once __DIR__ . '/../../includes/wa_util.php';
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
 
 $waService = new WhatsAppService($conn);
 $config = $waService->getConfig();
@@ -34,6 +17,10 @@ $status = '';
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $status = 'error';
+    } else {
     try {
         // Handle fix configuration
         if (isset($_POST['fix_config'])) {
@@ -129,11 +116,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $message = 'Error: ' . $e->getMessage();
         $status = 'error';
     }
+    }
 }
 
 // Test connection
 $testResult = null;
-if (isset($_POST['test_connection'])) {
+if (isset($_POST['test_connection']) && $status !== 'error') {
     try {
         // Check if API key is configured
         if (empty($config['api_key'])) {
@@ -239,10 +227,7 @@ if (isset($_POST['test_connection'])) {
 }
 ?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
-        
+<?php include __DIR__ . '/../../templates/layout_start.php'; ?>
         <div class="container-fluid">
             <!-- Page Heading -->
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
@@ -285,6 +270,7 @@ if (isset($_POST['test_connection'])) {
                         </div>
                         <div class="card-body">
                             <form method="post">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <div class="form-group">
                                     <label for="api_key">API Key <span class="text-danger">*</span></label>
                                     <input type="password" class="form-control" id="api_key" name="api_key" 
@@ -455,12 +441,7 @@ if (isset($_POST['test_connection'])) {
                 </div>
             </div>
         </div>
-    </div>
-    
-    <?php include __DIR__ . '/../../templates/footer.php'; ?>
-</div>
-
-<?php include __DIR__ . '/../../templates/scripts.php'; ?>
+<?php include __DIR__ . '/../../templates/layout_end.php'; ?>
 
 <script>
 // Show/hide API key and webhook secret

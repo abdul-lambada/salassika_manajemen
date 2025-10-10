@@ -1,31 +1,30 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+
+$currentUser = admin_require_auth(['admin']);
+
+$title = 'Detail Pengaduan';
+$active_page = 'list_pengaduan';
+$required_role = 'admin';
+
+$id_pengaduan = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+if ($id_pengaduan <= 0) {
+    header('Location: list_pengaduan.php?status=error&message=' . urlencode('Pengaduan tidak ditemukan.'));
     exit;
 }
 
-$title = "Detail Pengaduan";
-include '../../templates/header.php';
-include '../../includes/db.php';
-
-// Ambil ID pengaduan dari query string
-$id_pengaduan = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
-// Query data pengaduan
-$stmt = $conn->prepare("SELECT * FROM pengaduan WHERE id_pengaduan = :id_pengaduan");
-$stmt->bindParam(':id_pengaduan', $id_pengaduan);
+$stmt = $conn->prepare('SELECT * FROM pengaduan WHERE id_pengaduan = :id_pengaduan');
+$stmt->bindParam(':id_pengaduan', $id_pengaduan, PDO::PARAM_INT);
 $stmt->execute();
 $pengaduan = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$pengaduan) {
-    echo "<script>alert('Data pengaduan tidak ditemukan!'); window.location.href = 'list_pengaduan.php';</script>";
+    header('Location: list_pengaduan.php?status=error&message=' . urlencode('Pengaduan tidak ditemukan.'));
     exit;
 }
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
 
         <!-- Begin Page Content -->
         <div class="container-fluid">
@@ -128,18 +127,12 @@ if (!$pengaduan) {
                                     </td>
                                 </tr>
                                 <tr>
-                                    <th>Tanggal Pengaduan</th>
                                     <td><?php echo htmlspecialchars($pengaduan['tanggal_pengaduan']); ?></td>
                                 </tr>
                             </table>
                         </div>
-                    </div>
-                    <div class="mt-3">
-                        <a href="list_pengaduan.php" class="btn btn-secondary">Kembali ke List Pengaduan</a>
-                    </div>
                 </div>
             </div>
         </div>
     </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>

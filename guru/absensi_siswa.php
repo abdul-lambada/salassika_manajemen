@@ -1,34 +1,18 @@
 <?php
-session_start();
-// Load global configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
-include_once '../includes/email_util.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'guru') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$currentUser = admin_require_auth(['guru']);
 
 $active_page = "absensi_siswa"; // Untuk menandai menu aktif di sidebar
+$title = "Absensi Siswa";
+$required_role = 'guru';
+$csrfToken = admin_get_csrf_token();
 $message = ''; // Variabel untuk menyimpan pesan sukses
+$today = date('Y-m-d');
 
-// CSRF protection
-if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
-}
 function csrf_check() {
-    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
         throw new Exception('Invalid CSRF token');
     }
 }
@@ -39,64 +23,122 @@ try {
     $stmt_kelas->execute();
     $kelas_list = $stmt_kelas->fetchAll(PDO::FETCH_ASSOC);
 
-    // Jika form absensi disubmit
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_absensi'])) {
-        csrf_check();
-        $tanggal = date('Y-m-d');
-        $id_kelas = $_POST['id_kelas'];
-        $error = false;
-        foreach ($_POST['status'] as $id_siswa => $status_kehadiran) {
-            // Cek apakah fingerprint sudah ada untuk siswa ini hari ini
-            $stmt_fp = $conn->prepare("SELECT kh.timestamp FROM siswa s LEFT JOIN users u ON s.user_id = u.id LEFT JOIN tbl_kehadiran kh ON u.id = kh.user_id AND DATE(kh.timestamp) = ? WHERE s.id_siswa = ? LIMIT 1");
-            $stmt_fp->execute([$tanggal, $id_siswa]);
-            $fingerprint = $stmt_fp->fetch(PDO::FETCH_ASSOC);
-            if ($fingerprint && $fingerprint['timestamp']) {
-                // Jika fingerprint sudah ada, abaikan input manual
-                continue;
-            }
-
-            $catatan = htmlspecialchars($_POST['catatan'][$id_siswa]);
-
-            try {
-                // Initialize check statement before using it
-                $stmt_check = $conn->prepare("SELECT 1 FROM absensi_siswa WHERE id_siswa = :id_siswa AND tanggal = :tanggal");
-                $stmt_check->execute([':id_siswa' => $id_siswa, ':tanggal' => $tanggal]);
-                if ($stmt_check->rowCount() > 0) {
-                    $stmt_update = $conn->prepare("
-                        UPDATE absensi_siswa 
-                        SET status_kehadiran = :status_kehadiran, catatan = :catatan 
-                        WHERE id_siswa = :id_siswa AND tanggal = :tanggal
-                    ");
-                    $stmt_update->bindParam(':id_siswa', $id_siswa);
-                    $stmt_update->bindParam(':tanggal', $tanggal);
-                    $stmt_update->bindParam(':status_kehadiran', $status_kehadiran);
-                    $stmt_update->bindParam(':catatan', $catatan);
-                    $stmt_update->execute();
-                } else {
-                    $stmt_insert = $conn->prepare("
-                        INSERT INTO absensi_siswa (id_siswa, tanggal, status_kehadiran, catatan)
-                        VALUES (:id_siswa, :tanggal, :status_kehadiran, :catatan)
-                    ");
-                    $stmt_insert->bindParam(':id_siswa', $id_siswa);
-                    $stmt_insert->bindParam(':tanggal', $tanggal);
-                    $stmt_insert->bindParam(':status_kehadiran', $status_kehadiran);
-                    $stmt_insert->bindParam(':catatan', $catatan);
-                    $stmt_insert->execute();
-                }
-            } catch (PDOException $e) {
-                $error = true;
-            }
-        }
-
-        if ($error) {
-            $message = 'Terjadi kesalahan saat menyimpan absensi. Silakan coba lagi.';
+    $id_kelas = isset($_GET['id_kelas']) ? trim((string) $_GET['id_kelas']) : null;
+    if ($id_kelas !== null) {
+        if (!ctype_digit($id_kelas)) {
+            $id_kelas = null;
         } else {
-            $message = 'Absensi berhasil disimpan.';
+            $id_kelas = (int) $id_kelas;
         }
     }
 
-    // Jika kelas dipilih melalui GET
-    $id_kelas = isset($_GET['id_kelas']) ? $_GET['id_kelas'] : null;
+    $loadFingerprintMap = static function (PDO $conn, int $classId, string $date): array {
+        $stmt = $conn->prepare("
+            SELECT s.id_siswa, kh.timestamp, kh.verification_mode, kh.status
+            FROM siswa s
+            JOIN users u ON s.user_id = u.id
+            JOIN tbl_kehadiran kh ON u.id = kh.user_id
+            WHERE s.id_kelas = :id_kelas AND DATE(kh.timestamp) = :tanggal
+        ");
+        $stmt->execute([
+            ':id_kelas' => $classId,
+            ':tanggal' => $date,
+        ]);
+
+        $map = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $studentId = (int) ($row['id_siswa'] ?? 0);
+            if ($studentId > 0 && !isset($map[$studentId])) {
+                $map[$studentId] = $row;
+            }
+        }
+
+        return $map;
+    };
+
+    $fingerprintBySiswa = [];
+    if ($id_kelas !== null) {
+        $fingerprintBySiswa = $loadFingerprintMap($conn, $id_kelas, $today);
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_absensi'])) {
+        csrf_check();
+
+        $id_kelas_post_raw = trim((string) ($_POST['id_kelas'] ?? ''));
+        $id_kelas_post = ctype_digit($id_kelas_post_raw) ? (int) $id_kelas_post_raw : null;
+
+        $targetClassId = $id_kelas_post ?? $id_kelas;
+        if ($targetClassId !== null && ($id_kelas === null || $targetClassId !== $id_kelas)) {
+            $fingerprintBySiswa = $loadFingerprintMap($conn, $targetClassId, $today);
+        }
+
+        $errorsEncountered = false;
+        foreach ((array) ($_POST['status'] ?? []) as $id_siswa => $status_kehadiran) {
+            $id_siswa = (int) $id_siswa;
+            $status_kehadiran = trim((string) $status_kehadiran);
+            if ($id_siswa <= 0 || $status_kehadiran === '') {
+                continue;
+            }
+
+            $fingerprint = $fingerprintBySiswa[$id_siswa] ?? null;
+            if ($fingerprint && !empty($fingerprint['timestamp'])) {
+                continue;
+            }
+
+            $catatan = trim((string) ($_POST['catatan'][$id_siswa] ?? ''));
+
+            try {
+                $stmt_check = $conn->prepare('SELECT 1 FROM absensi_siswa WHERE id_siswa = :id_siswa AND tanggal = :tanggal');
+                $stmt_check->execute([
+                    ':id_siswa' => $id_siswa,
+                    ':tanggal' => $today,
+                ]);
+
+                if ($stmt_check->fetchColumn()) {
+                    $stmt_update = $conn->prepare('
+                        UPDATE absensi_siswa
+                        SET status_kehadiran = :status_kehadiran, catatan = :catatan
+                        WHERE id_siswa = :id_siswa AND tanggal = :tanggal
+                    ');
+                    $stmt_update->execute([
+                        ':status_kehadiran' => $status_kehadiran,
+                        ':catatan' => $catatan,
+                        ':id_siswa' => $id_siswa,
+                        ':tanggal' => $today,
+                    ]);
+                } else {
+                    $stmt_insert = $conn->prepare('
+                        INSERT INTO absensi_siswa (id_siswa, tanggal, status_kehadiran, catatan)
+                        VALUES (:id_siswa, :tanggal, :status_kehadiran, :catatan)
+                    ');
+                    $stmt_insert->execute([
+                        ':id_siswa' => $id_siswa,
+                        ':tanggal' => $today,
+                        ':status_kehadiran' => $status_kehadiran,
+                        ':catatan' => $catatan,
+                    ]);
+                }
+            } catch (PDOException $e) {
+                admin_log_message(
+                    'absensi_siswa_errors.log',
+                    'Failed to save manual attendance: ' . $e->getMessage() . ' for student ID ' . $id_siswa,
+                    'ERROR'
+                );
+                $errorsEncountered = true;
+            }
+        }
+
+        $message = $errorsEncountered
+            ? 'Terjadi kesalahan saat menyimpan absensi. Silakan coba lagi.'
+            : 'Absensi berhasil disimpan.';
+
+        if ($id_kelas_post !== null) {
+            $id_kelas = $id_kelas_post;
+            $fingerprintBySiswa = $loadFingerprintMap($conn, $id_kelas, $today);
+        }
+    }
+
+    // Jika kelas dipilih melalui GET (setelah POST fallback)
     $siswa_list = array();
     $siswa_null_list = array(); // Inisialisasi array untuk siswa yang user_id-nya NULL
 
@@ -235,18 +277,18 @@ try {
     exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Absensi Siswa - Management Salassika</title>
-    <link rel="icon" type="image/jpeg" href="../assets/img/logo.jpg">
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-    <style>
+<?php
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
+    $today = date('Y-m-d');
+    $stmt = $conn->prepare("SELECT COUNT(*) as total FROM tbl_kehadiran WHERE DATE(timestamp) = ?");
+    $stmt->execute([$today]);
+    $total_fp = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
+    echo json_encode(['total_fp' => $total_fp]);
+    exit;
+}
+?>
+<?php include __DIR__ . '/../templates/layout_start.php'; ?>
+        <style>
         .fingerprint-status {
             font-size: 0.8em;
             padding: 2px 6px;
@@ -265,18 +307,7 @@ try {
             font-size: 0.7em;
         }
     </style>
-</head>
-
-<body id="page-top">
-    <?php include __DIR__ . '/../templates/header.php'; ?>
-    <?php include __DIR__ . '/../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            <!-- <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                <h1 class="h3 mb-0 text-gray-800">Absensi Siswa</h1>
-            </nav> -->
-            <?php include __DIR__ . '/../templates/navbar.php'; ?>
-            <div class="container-fluid">
+        <div class="container-fluid">
                 <!-- Tampilkan pesan sukses jika ada -->
                 <?php if (!empty($message)): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -436,7 +467,7 @@ try {
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
-                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <input type="hidden" name="id_kelas" value="<?php echo htmlspecialchars($id_kelas); ?>">
                                 <div class="table-responsive">
                                     <table class="table table-bordered table-hover">
@@ -600,9 +631,8 @@ try {
                 <?php endif; ?>
             </div>
         </div>
-        <?php include __DIR__ . '/../templates/footer.php'; ?>
-    </div>
-    <div id="badge-fingerprint" class="badge badge-warning mb-2" style="display:none;">Ada Absen Fingerprint Baru!</div>
+        <div id="badge-fingerprint" class="badge badge-warning mb-2" style="display:none;">Ada Absen Fingerprint Baru!</div>
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>
     <script>
 // Polling AJAX fingerprint baru
 setInterval(function() {
@@ -616,17 +646,13 @@ setInterval(function() {
         });
 }, 10000);
 </script>
-<script>
+    <script>
 document.querySelectorAll('form').forEach(function(form) {
-    form.addEventListener('submit', function() {
+    form.addEventListener('submit', function(event) {
         var btn = this.querySelector('button[type=submit]');
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyimpan...';
         }
     });
 });
 </script>
-</body>
-
-</html>

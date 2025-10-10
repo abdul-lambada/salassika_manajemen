@@ -1,13 +1,13 @@
 <?php
-session_start();
-include '../../includes/db.php';
-$active_page = "laporan_siswa"; // Untuk menandai menu aktif di sidebar
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
-    exit;
-}
+$currentUser = admin_require_auth(['admin', 'guru']);
+
+$title = 'Laporan Absensi Siswa';
+$active_page = 'laporan_siswa';
+$required_role = null;
+$csrfToken = admin_get_csrf_token();
 
 // Filter berdasarkan tanggal dan kelas
 $tanggal_awal = isset($_GET['tanggal_awal']) ? $_GET['tanggal_awal'] : '';
@@ -56,6 +56,10 @@ $absensi_list = $stmt_absensi->fetchAll(PDO::FETCH_ASSOC);
 
 // Tombol Download Laporan
 if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
+    if (!admin_validate_csrf($_GET['token'] ?? null)) {
+        header('Location: laporan_siswa.php?status=error&message=' . urlencode('Token tidak valid.'));
+        exit;
+    }
     $fpdf_path = '../../assets/vendor/fpdf/fpdf.php';
     if (file_exists($fpdf_path)) {
         require($fpdf_path);
@@ -184,104 +188,80 @@ if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
     $pdf->Output('D', 'laporan_absensi_siswa.pdf'); // Gunakan 'D' untuk memaksa unduhan
     exit;
 }
+include '../../templates/layout_start.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Laporan Absensi Siswa - Management Salassika</title>
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-</head>
-<body id="page-top">
-    <?php include '../../templates/header.php'; ?>
-    <?php include '../../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            <?php include '../../templates/navbar.php'; ?>
-            <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                <!-- <h1 class="h3 mb-0 text-gray-800">Laporan Absensi Siswa</h1> -->
-            </nav>
-            <div class="container-fluid">
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Siswa</h6>
-                            </div>
-                            <div class="card-body">
-                                <form method="GET" action="">
-                                    <!-- Filter Tanggal -->
-                                    <label>Tanggal Awal:</label>
-                                    <input type="date" name="tanggal_awal" class="form-control" value="<?php echo htmlspecialchars($tanggal_awal); ?>"><br>
-                                    <label>Tanggal Akhir:</label>
-                                    <input type="date" name="tanggal_akhir" class="form-control" value="<?php echo htmlspecialchars($tanggal_akhir); ?>"><br>
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Siswa</h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="GET" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
+                                <label>Tanggal Awal:</label>
+                                <input type="date" name="tanggal_awal" class="form-control" value="<?= htmlspecialchars($tanggal_awal); ?>"><br>
+                                <label>Tanggal Akhir:</label>
+                                <input type="date" name="tanggal_akhir" class="form-control" value="<?= htmlspecialchars($tanggal_akhir); ?>"><br>
 
-                                    <!-- Filter Kelas -->
-                                    <label>Kelas:</label>
-                                    <select name="id_kelas" class="form-control">
-                                        <option value="">-- Semua Kelas --</option>
-                                        <?php foreach ($kelas_list as $kelas): ?>
-                                            <option value="<?php echo htmlspecialchars($kelas['id_kelas']); ?>"
-                                                <?php echo ($id_kelas == $kelas['id_kelas']) ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($kelas['nama_kelas']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select><br>
+                                <label>Kelas:</label>
+                                <select name="id_kelas" class="form-control">
+                                    <option value="">-- Semua Kelas --</option>
+                                    <?php foreach ($kelas_list as $kelas): ?>
+                                        <option value="<?= htmlspecialchars($kelas['id_kelas']); ?>"
+                                            <?= ($id_kelas == $kelas['id_kelas']) ? 'selected' : ''; ?>>
+                                            <?= htmlspecialchars($kelas['nama_kelas']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select><br>
 
-                                    <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
-                                    <a href="?<?php echo http_build_query($_GET); ?>&download=pdf" class="btn btn-danger">Download PDF</a>
-                                </form>
-                            </div>
+                                <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
+                                <a href="?<?= http_build_query(array_merge($_GET, ['download' => 'pdf', 'token' => $csrfToken])); ?>" class="btn btn-danger">Download PDF</a>
+                            </form>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Tabel Laporan Absensi -->
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Siswa</h6>
-                            </div>
-                            <div class="card-body">
-                                <table class="table table-bordered table-responsive-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>Tanggal</th>
-                                            <th>Nama Siswa</th>
-                                            <th>Kelas</th>
-                                            <th>Status Kehadiran</th>
-                                            <th>Catatan</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php if (!empty($absensi_list)): ?>
-                                            <?php foreach ($absensi_list as $absensi): ?>
-                                                <tr>
-                                                    <td><?php echo htmlspecialchars($absensi['tanggal']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['nama_siswa']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['nama_kelas']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['status_kehadiran']); ?></td>
-                                                    <td><?php echo htmlspecialchars($absensi['catatan']); ?></td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        <?php else: ?>
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Siswa</h6>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-bordered table-responsive-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Tanggal</th>
+                                        <th>Nama Siswa</th>
+                                        <th>Kelas</th>
+                                        <th>Status Kehadiran</th>
+                                        <th>Catatan</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!empty($absensi_list)): ?>
+                                        <?php foreach ($absensi_list as $absensi): ?>
                                             <tr>
-                                                <td colspan="5" class="text-center">Tidak ada data absensi.</td>
+                                                <td><?= htmlspecialchars($absensi['tanggal']); ?></td>
+                                                <td><?= htmlspecialchars($absensi['nama_siswa']); ?></td>
+                                                <td><?= htmlspecialchars($absensi['nama_kelas']); ?></td>
+                                                <td><?= htmlspecialchars($absensi['status_kehadiran']); ?></td>
+                                                <td><?= htmlspecialchars($absensi['catatan']); ?></td>
                                             </tr>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
-                            </div>
+                                        <?php endforeach; ?>
+                                    <?php else: ?>
+                                        <tr>
+                                            <td colspan="5" class="text-center">Tidak ada data absensi.</td>
+                                        </tr>
+                                    <?php endif; ?>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <?php include '../../templates/footer.php'; ?>
-    </div>
-</body>
-</html>
+<?php include '../../templates/layout_end.php'; ?>

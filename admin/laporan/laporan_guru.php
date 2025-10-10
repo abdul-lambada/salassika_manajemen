@@ -1,12 +1,19 @@
 <?php
-session_start();
-include '../../includes/db.php';
-$active_page = "laporan_guru"; // Untuk menandai menu aktif di sidebar
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user'])) {
-    header("Location: ../auth/login.php");
-    exit;
+$currentUser = admin_require_auth(['admin', 'guru']);
+
+$title = 'Laporan Absensi Guru';
+$active_page = 'laporan_guru';
+$required_role = null;
+$csrfToken = admin_get_csrf_token();
+
+if (isset($_GET['csrf_token']) && $_GET['csrf_token'] !== '') {
+    if (!admin_validate_csrf($_GET['csrf_token'])) {
+        header('Location: laporan_guru.php?status=error&message=' . urlencode('Token tidak valid.'));
+        exit;
+    }
 }
 
 // Filter berdasarkan tanggal
@@ -51,6 +58,10 @@ $absensi_list = $stmt_absensi->fetchAll(PDO::FETCH_ASSOC);
 
 // Tombol Download Laporan
 if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
+    if (!admin_validate_csrf($_GET['token'] ?? null)) {
+        header('Location: laporan_guru.php?status=error&message=' . urlencode('Token tidak valid.'));
+        exit;
+    }
     $fpdf_path = '../../assets/vendor/fpdf/fpdf.php';
     if (file_exists($fpdf_path)) {
         require($fpdf_path);
@@ -183,139 +194,112 @@ if (isset($_GET['download']) && $_GET['download'] == 'pdf') {
     $pdf->Output('D', 'laporan_absensi_guru.pdf'); // Gunakan 'D' untuk memaksa unduhan
     exit;
 }
+include '../../templates/layout_start.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Guru</h6>
+                        </div>
+                        <div class="card-body">
+                            <form method="GET" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
+                                <label>Tanggal Awal:</label>
+                                <input type="date" name="tanggal_awal" class="form-control" value="<?= htmlspecialchars($tanggal_awal); ?>"><br>
 
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Laporan Absensi Guru - Management Salassika</title>
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-</head>
+                                <label>Tanggal Akhir:</label>
+                                <input type="date" name="tanggal_akhir" class="form-control" value="<?= htmlspecialchars($tanggal_akhir); ?>"><br>
 
-<body id="page-top">
-    <?php include '../../templates/header.php'; ?>
-    <?php include '../../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            <?php include '../../templates/navbar.php'; ?>
-            <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                <!-- <h1 class="h3 mb-0 text-gray-800">Laporan Absensi Guru</h1> -->
-            </nav>
-            <div class="container-fluid">
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Filter Laporan Absensi Guru</h6>
-                            </div>
-                            <div class="card-body">
-                                <form method="GET" action="">
-                                    <!-- Filter Tanggal -->
-                                    <label>Tanggal Awal:</label>
-                                    <input type="date" name="tanggal_awal" class="form-control" value="<?php echo htmlspecialchars($tanggal_awal); ?>"><br>
-
-                                    <label>Tanggal Akhir:</label>
-                                    <input type="date" name="tanggal_akhir" class="form-control" value="<?php echo htmlspecialchars($tanggal_akhir); ?>"><br>
-
-                                    <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
-                                    <a href="?<?php echo http_build_query($_GET); ?>&download=pdf" class="btn btn-danger">Download PDF</a>
-                                </form>
-                            </div>
+                                <button type="submit" class="btn btn-primary">Tampilkan Laporan</button>
+                                <a href="?<?= http_build_query(array_merge($_GET, ['download' => 'pdf', 'token' => $csrfToken])); ?>" class="btn btn-danger">Download PDF</a>
+                            </form>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Tabel Laporan Absensi -->
-                <div class="row">
-                    <div class="col-lg-12">
-                        <div class="card shadow mb-4">
-                            <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Guru</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered table-striped">
-                                        <thead class="thead-dark">
-                                            <tr>
-                                                <th>Tanggal</th>
-                                                <th>Nama Guru</th>
-                                                <th>NIP</th>
-                                                <th>Jenis Kelamin</th>
-                                                <th>Status Kehadiran</th>
-                                                <th>Jam Masuk</th>
-                                                <th>Jam Keluar</th>
-                                                <th>Sumber Data</th>
-                                                <th>Catatan</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php if (!empty($absensi_list)): ?>
-                                                <?php foreach ($absensi_list as $absensi): ?>
-                                                    <tr>
-                                                        <td><?php echo htmlspecialchars($absensi['tanggal']); ?></td>
-                                                        <td><?php echo htmlspecialchars($absensi['nama_guru']); ?></td>
-                                                        <td><?php echo htmlspecialchars($absensi['nip']); ?></td>
-                                                        <td><?php echo htmlspecialchars($absensi['jenis_kelamin']); ?></td>
-                                                        <td>
-                                                            <?php 
-                                                            $status = $absensi['status_kehadiran'];
-                                                            $badge_class = '';
-                                                            switch($status) {
-                                                                case 'Hadir':
-                                                                    $badge_class = 'badge-success';
-                                                                    break;
-                                                                case 'Sakit':
-                                                                    $badge_class = 'badge-warning';
-                                                                    break;
-                                                                case 'Izin':
-                                                                    $badge_class = 'badge-info';
-                                                                    break;
-                                                                case 'Alpha':
-                                                                    $badge_class = 'badge-danger';
-                                                                    break;
-                                                                default:
-                                                                    $badge_class = 'badge-secondary';
-                                                            }
-                                                            ?>
-                                                            <span class="badge <?php echo $badge_class; ?>">
-                                                                <?php echo htmlspecialchars($status); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td><?php echo $absensi['jam_masuk'] ? htmlspecialchars($absensi['jam_masuk']) : '-'; ?></td>
-                                                        <td><?php echo $absensi['jam_keluar'] ? htmlspecialchars($absensi['jam_keluar']) : '-'; ?></td>
-                                                        <td>
-                                                            <?php 
-                                                            $sumber = $absensi['sumber_data'];
-                                                            $sumber_badge = $sumber == 'Fingerprint' ? 'badge-primary' : 'badge-secondary';
-                                                            ?>
-                                                            <span class="badge <?php echo $sumber_badge; ?>">
-                                                                <?php echo htmlspecialchars($sumber); ?>
-                                                            </span>
-                                                        </td>
-                                                        <td><?php echo $absensi['catatan'] ? htmlspecialchars($absensi['catatan']) : '-'; ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            <?php else: ?>
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="card shadow mb-4">
+                        <div class="card-header py-3">
+                            <h6 class="m-0 font-weight-bold text-primary">Laporan Absensi Guru</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-striped">
+                                    <thead class="thead-dark">
+                                        <tr>
+                                            <th>Tanggal</th>
+                                            <th>Nama Guru</th>
+                                            <th>NIP</th>
+                                            <th>Jenis Kelamin</th>
+                                            <th>Status Kehadiran</th>
+                                            <th>Jam Masuk</th>
+                                            <th>Jam Keluar</th>
+                                            <th>Sumber Data</th>
+                                            <th>Catatan</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php if (!empty($absensi_list)): ?>
+                                            <?php foreach ($absensi_list as $absensi): ?>
                                                 <tr>
-                                                    <td colspan="9" class="text-center">Tidak ada data absensi.</td>
+                                                    <td><?= htmlspecialchars($absensi['tanggal']); ?></td>
+                                                    <td><?= htmlspecialchars($absensi['nama_guru']); ?></td>
+                                                    <td><?= htmlspecialchars($absensi['nip']); ?></td>
+                                                    <td><?= htmlspecialchars($absensi['jenis_kelamin']); ?></td>
+                                                    <td>
+                                                        <?php
+                                                        $status = $absensi['status_kehadiran'];
+                                                        $badge_class = '';
+                                                        switch ($status) {
+                                                            case 'Hadir':
+                                                                $badge_class = 'badge-success';
+                                                                break;
+                                                            case 'Sakit':
+                                                                $badge_class = 'badge-warning';
+                                                                break;
+                                                            case 'Izin':
+                                                                $badge_class = 'badge-info';
+                                                                break;
+                                                            case 'Alpha':
+                                                                $badge_class = 'badge-danger';
+                                                                break;
+                                                            default:
+                                                                $badge_class = 'badge-secondary';
+                                                        }
+                                                        ?>
+                                                        <span class="badge <?= $badge_class; ?>">
+                                                            <?= htmlspecialchars($status); ?>
+                                                        </span>
+                                                    </td>
+                                                    <td><?= $absensi['jam_masuk'] ? htmlspecialchars($absensi['jam_masuk']) : '-'; ?></td>
+                                                    <td><?= $absensi['jam_keluar'] ? htmlspecialchars($absensi['jam_keluar']) : '-'; ?></td>
+                                                    <td>
+                                                        <?php
+                                                        $sumber = $absensi['sumber_data'];
+                                                        $sumber_badge = $sumber === 'Fingerprint' ? 'badge-primary' : 'badge-secondary';
+                                                        ?>
+                                                        <span class="badge <?= $sumber_badge; ?>">
+                                                            <?= htmlspecialchars($sumber); ?>
+                                                        </span>
+                                                    </td>
+                                                    <td><?= $absensi['catatan'] ? htmlspecialchars($absensi['catatan']) : '-'; ?></td>
                                                 </tr>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <tr>
+                                                <td colspan="9" class="text-center">Tidak ada data absensi.</td>
+                                            </tr>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <?php include '../../templates/footer.php'; ?>
-    </div>
-    <?php include '../../templates/scripts.php'; ?>
-</body>
-
-</html>
+<?php include '../../templates/layout_end.php'; ?>

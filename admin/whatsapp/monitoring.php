@@ -1,18 +1,14 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
-    exit;
-}
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/wa_util.php';
+
+$currentUser = admin_require_auth(['admin']);
 
 $title = "Monitoring WhatsApp";
 $active_page = "whatsapp_monitoring";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-
-// Koneksi ke database
-include '../../includes/db.php';
-require_once __DIR__ . '/../../includes/wa_util.php';
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
 
 $waService = new WhatsAppService($conn);
 
@@ -21,39 +17,34 @@ $message = '';
 $alert_class = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['delete_single']) && isset($_POST['log_id'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $alert_class = 'alert-danger';
+    } else {
         try {
-            $logId = (int)$_POST['log_id'];
-            $stmt = $conn->prepare("DELETE FROM whatsapp_logs WHERE id = ?");
-            $stmt->execute([$logId]);
-            $message = 'Log berhasil dihapus!';
-            $alert_class = 'alert-success';
-        } catch (Exception $e) {
-            $message = 'Error menghapus log: ' . $e->getMessage();
-            $alert_class = 'alert-danger';
-        }
-    } elseif (isset($_POST['delete_all'])) {
-        try {
-            $stmt = $conn->prepare("DELETE FROM whatsapp_logs");
-            $stmt->execute();
-            $message = 'Semua log berhasil dihapus!';
-            $alert_class = 'alert-success';
-        } catch (Exception $e) {
-            $message = 'Error menghapus semua log: ' . $e->getMessage();
-            $alert_class = 'alert-danger';
-        }
-    } elseif (isset($_POST['delete_selected']) && isset($_POST['selected_logs'])) {
-        try {
-            $selectedLogs = $_POST['selected_logs'];
-            if (!empty($selectedLogs)) {
-                $placeholders = str_repeat('?,', count($selectedLogs) - 1) . '?';
-                $stmt = $conn->prepare("DELETE FROM whatsapp_logs WHERE id IN ($placeholders)");
-                $stmt->execute($selectedLogs);
-                $message = count($selectedLogs) . ' log berhasil dihapus!';
+            if (isset($_POST['delete_single']) && isset($_POST['log_id'])) {
+                $logId = (int)$_POST['log_id'];
+                $stmt = $conn->prepare("DELETE FROM whatsapp_logs WHERE id = ?");
+                $stmt->execute([$logId]);
+                $message = 'Log berhasil dihapus!';
                 $alert_class = 'alert-success';
+            } elseif (isset($_POST['delete_all'])) {
+                $stmt = $conn->prepare("DELETE FROM whatsapp_logs");
+                $stmt->execute();
+                $message = 'Semua log berhasil dihapus!';
+                $alert_class = 'alert-success';
+            } elseif (isset($_POST['delete_selected']) && isset($_POST['selected_logs'])) {
+                $selectedLogs = array_map('intval', (array)$_POST['selected_logs']);
+                if (!empty($selectedLogs)) {
+                    $placeholders = str_repeat('?,', count($selectedLogs) - 1) . '?';
+                    $stmt = $conn->prepare("DELETE FROM whatsapp_logs WHERE id IN ($placeholders)");
+                    $stmt->execute($selectedLogs);
+                    $message = count($selectedLogs) . ' log berhasil dihapus!';
+                    $alert_class = 'alert-success';
+                }
             }
         } catch (Exception $e) {
-            $message = 'Error menghapus log yang dipilih: ' . $e->getMessage();
+            $message = 'Error menghapus log: ' . $e->getMessage();
             $alert_class = 'alert-danger';
         }
     }
@@ -124,11 +115,8 @@ try {
     $logs = [];
     $stats = [];
 }
+include '../../templates/layout_start.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- Begin Alert SB Admin 2 -->
             <?php if (!empty($message)): ?>
@@ -257,6 +245,7 @@ try {
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Log Pengiriman Pesan</h6>
                     <form method="POST" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         <button type="submit" name="delete_all" class="btn btn-danger btn-sm" onclick="return confirm('Yakin ingin menghapus semua log?')">
                             <i class="fas fa-trash"></i> Hapus Semua
                         </button>
@@ -264,6 +253,7 @@ try {
                 </div>
                 <div class="card-body">
                     <form method="POST" id="bulkDeleteForm">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         <div class="table-responsive">
                             <table class="table table-bordered table-hover" id="dataTable" width="100%" cellspacing="0">
                                 <thead class="thead-light">
@@ -338,6 +328,7 @@ try {
                                                         </button>
                                                     <?php endif; ?>
                                                     <form method="POST" style="display:inline;">
+                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                         <input type="hidden" name="log_id" value="<?php echo $log['id']; ?>">
                                                         <button type="submit" name="delete_single" class="btn btn-sm btn-outline-danger" onclick="return confirm('Yakin ingin menghapus log ini?')" title="Hapus">
                                                             <i class="fas fa-trash"></i>
@@ -448,8 +439,7 @@ try {
         </div>
     </div>
     
-    <?php include __DIR__ . '/../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>
 
 <!-- Delete All Modal -->
 <div class="modal fade" id="deleteAllModal" tabindex="-1" role="dialog" aria-labelledby="deleteAllModalLabel" aria-hidden="true">
@@ -472,6 +462,7 @@ try {
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Batal</button>
                 <form method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                     <button type="submit" name="delete_all" class="btn btn-danger">
                         <i class="fas fa-trash"></i> Hapus Semua
                     </button>
@@ -480,9 +471,6 @@ try {
         </div>
     </div>
 </div>
-
-<?php include __DIR__ . '/../../templates/scripts.php'; ?>
-
 <script>
 $(document).ready(function() {
     // Initialize DataTable with custom settings

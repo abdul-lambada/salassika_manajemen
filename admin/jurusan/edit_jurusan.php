@@ -1,33 +1,38 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
-    exit;
-}
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-include '../../includes/db.php';
-$message = '';
-$alert_class = '';
-if (!isset($_GET['id'])) {
-    header('Location: list_jurusan.php?status=error');
+$currentUser = admin_require_auth(['admin']);
+
+$title = "Edit Jurusan";
+$active_page = "list_jurusan";
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
+
+$id_jurusan = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($id_jurusan <= 0) {
+    header('Location: list_jurusan.php?status=error&message=' . urlencode('Jurusan tidak ditemukan.'));
     exit;
 }
-$id_jurusan = $_GET['id'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nama_jurusan = trim($_POST['nama_jurusan']);
-    if (!empty($nama_jurusan)) {
-        $stmt = $conn->prepare("UPDATE jurusan SET nama_jurusan = ? WHERE id_jurusan = ?");
-        if ($stmt->execute([$nama_jurusan, $id_jurusan])) {
-            header('Location: list_jurusan.php?status=edit_success');
-            exit;
-        } else {
-            $message = 'Gagal mengedit jurusan.';
-            $alert_class = 'alert-danger';
-        }
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $alertClass = 'alert-danger';
     } else {
-        $message = 'Nama jurusan tidak boleh kosong.';
-        $alert_class = 'alert-warning';
+        $nama_jurusan = trim($_POST['nama_jurusan'] ?? '');
+        if ($nama_jurusan !== '') {
+            $stmt = $conn->prepare("UPDATE jurusan SET nama_jurusan = ? WHERE id_jurusan = ?");
+            if ($stmt->execute([$nama_jurusan, $id_jurusan])) {
+                header('Location: list_jurusan.php?status=edit_success');
+                exit;
+            }
+            $message = 'Gagal mengedit jurusan.';
+            $alertClass = 'alert-danger';
+        } else {
+            $message = 'Nama jurusan tidak boleh kosong.';
+            $alertClass = 'alert-warning';
+        }
     }
 }
 
@@ -39,23 +44,18 @@ if (!$jurusan) {
     exit;
 }
 
-$title = "Edit Jurusan";
-$active_page = "edit_jurusan";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$statusMap = [];
+$alert = [
+    'should_display' => isset($message) && $message !== '',
+    'message' => $message ?? '',
+    'class' => $alertClass ?? 'alert-info',
+];
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
-            <!-- <h1 class="h3 mb-4 text-gray-800">Edit Jurusan</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display']): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">
@@ -65,9 +65,10 @@ include '../../templates/sidebar.php';
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <div class="form-group">
                                     <label for="nama_jurusan">Nama Jurusan</label>
-                                    <input type="text" class="form-control" id="nama_jurusan" name="nama_jurusan" value="<?php echo htmlspecialchars($jurusan['nama_jurusan']); ?>" required>
+                                    <input type="text" class="form-control" id="nama_jurusan" name="nama_jurusan" value="<?= htmlspecialchars($jurusan['nama_jurusan']); ?>" required>
                                 </div>
                                 <button type="submit" class="btn btn-success">Simpan</button>
                                 <a href="list_jurusan.php" class="btn btn-secondary">Batal</a>
@@ -77,6 +78,4 @@ include '../../templates/sidebar.php';
                 </div>
             </div>
         </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>

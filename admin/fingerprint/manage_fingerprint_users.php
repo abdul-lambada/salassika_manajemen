@@ -1,22 +1,29 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user'])) {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-$title = "Kelola Pengguna Fingerprint";
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/zklib/zklibrary.php';
+
+$currentUser = admin_require_auth(['admin']);
+
+$title = 'Kelola Pengguna Fingerprint';
 $active_page = 'manage_devices';
 $required_role = 'admin';
-require '../../includes/zklib/zklibrary.php';
-include '../../includes/db.php';
 
 $message = '';
 $alert_class = '';
+$csrfToken = admin_get_csrf_token();
+
+$csrfValid = true;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $alert_class = 'alert-danger';
+        $csrfValid = false;
+    }
+}
 
 // Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($csrfValid && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
         switch ($_POST['action']) {
             case 'add_user':
@@ -36,15 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $message = "Pengguna berhasil ditambahkan ke fingerprint: $user_name";
                             $alert_class = 'alert-success';
                         } else {
-                            $message = "Gagal menambahkan pengguna ke fingerprint";
+                            $message = 'Gagal menambahkan pengguna ke fingerprint';
                             $alert_class = 'alert-danger';
                         }
                     } else {
-                        $message = "Gagal terhubung ke perangkat fingerprint";
+                        $message = 'Gagal terhubung ke perangkat fingerprint';
                         $alert_class = 'alert-danger';
                     }
                 } catch (Exception $e) {
-                    $message = "Error: " . $e->getMessage();
+                    $message = 'Error: ' . $e->getMessage();
                     $alert_class = 'alert-danger';
                 }
                 break;
@@ -59,18 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $zk->enableDevice();
                         $zk->disconnect();
                         if ($result) {
-                            $message = "Pengguna berhasil dihapus dari fingerprint";
+                            $message = 'Pengguna berhasil dihapus dari fingerprint';
                             $alert_class = 'alert-success';
                         } else {
-                            $message = "Gagal menghapus pengguna dari fingerprint";
+                            $message = 'Gagal menghapus pengguna dari fingerprint';
                             $alert_class = 'alert-danger';
                         }
                     } else {
-                        $message = "Gagal terhubung ke perangkat fingerprint";
+                        $message = 'Gagal terhubung ke perangkat fingerprint';
                         $alert_class = 'alert-danger';
                     }
                 } catch (Exception $e) {
-                    $message = "Error: " . $e->getMessage();
+                    $message = 'Error: ' . $e->getMessage();
                     $alert_class = 'alert-danger';
                 }
                 break;
@@ -98,12 +105,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             } else {
                                 $role = 'siswa';
                             }
-                            $check_stmt = $conn->prepare("SELECT id, name, role FROM users WHERE uid = ?");
+                            $check_stmt = $conn->prepare('SELECT id, name, role FROM users WHERE uid = ?');
                             $check_stmt->execute([$uid]);
                             $user_db = $check_stmt->fetch(PDO::FETCH_ASSOC);
                             if (!$user_db) {
                                 // Insert user baru
-                                $insert_stmt = $conn->prepare("INSERT INTO users (uid, name, role) VALUES (?, ?, ?)");
+                                $insert_stmt = $conn->prepare('INSERT INTO users (uid, name, role) VALUES (?, ?, ?)');
                                 $insert_stmt->execute([$uid, $user_name, $role]);
                                 $user_id_db = $conn->lastInsertId();
                                 $synced_count++;
@@ -111,27 +118,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $user_id_db = $user_db['id'];
                                 // Jika nama/role tidak cocok, update agar konsisten
                                 if ($user_db['name'] !== $user_name || $user_db['role'] !== $role) {
-                                    $update_stmt = $conn->prepare("UPDATE users SET name = ?, role = ? WHERE id = ?");
+                                    $update_stmt = $conn->prepare('UPDATE users SET name = ?, role = ? WHERE id = ?');
                                     $update_stmt->execute([$user_name, $role, $user_id_db]);
                                 }
                             }
                             // Mapping ke guru/siswa
                             if ($role === 'siswa') {
-                                $siswa_stmt = $conn->prepare("SELECT id_siswa FROM siswa WHERE nis = ?");
+                                $siswa_stmt = $conn->prepare('SELECT id_siswa FROM siswa WHERE nis = ?');
                                 $siswa_stmt->execute([$uid]);
                                 $siswa = $siswa_stmt->fetch(PDO::FETCH_ASSOC);
                                 if ($siswa) {
-                                    $update_stmt = $conn->prepare("UPDATE siswa SET user_id = ? WHERE id_siswa = ? AND (user_id IS NULL OR user_id != ?)");
+                                    $update_stmt = $conn->prepare('UPDATE siswa SET user_id = ? WHERE id_siswa = ? AND (user_id IS NULL OR user_id != ?)');
                                     $update_stmt->execute([$user_id_db, $siswa['id_siswa'], $user_id_db]);
                                 } else {
                                     $warning_msgs[] = "UID $uid (Siswa) belum di-mapping ke data siswa manapun.";
                                 }
                             } elseif ($role === 'guru') {
-                                $guru_stmt = $conn->prepare("SELECT id_guru FROM guru WHERE nip = ?");
+                                $guru_stmt = $conn->prepare('SELECT id_guru FROM guru WHERE nip = ?');
                                 $guru_stmt->execute([$uid]);
                                 $guru = $guru_stmt->fetch(PDO::FETCH_ASSOC);
                                 if ($guru) {
-                                    $update_stmt = $conn->prepare("UPDATE guru SET user_id = ? WHERE id_guru = ? AND (user_id IS NULL OR user_id != ?)");
+                                    $update_stmt = $conn->prepare('UPDATE guru SET user_id = ? WHERE id_guru = ? AND (user_id IS NULL OR user_id != ?)');
                                     $update_stmt->execute([$user_id_db, $guru['id_guru'], $user_id_db]);
                                 } else {
                                     $warning_msgs[] = "UID $uid (Guru) belum di-mapping ke data guru manapun.";
@@ -144,11 +151,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         $alert_class = 'alert-success';
                     } else {
-                        $message = "Gagal terhubung ke perangkat fingerprint";
+                        $message = 'Gagal terhubung ke perangkat fingerprint';
                         $alert_class = 'alert-danger';
                     }
                 } catch (Exception $e) {
-                    $message = "Error: " . $e->getMessage();
+                    $message = 'Error: ' . $e->getMessage();
                     $alert_class = 'alert-danger';
                 }
                 break;
@@ -156,8 +163,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 // Tambahkan tombol sinkronisasi semua device di atas form sinkronisasi
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_all_devices'])) {
-    $all_devices_stmt = $conn->query("SELECT * FROM fingerprint_devices WHERE is_active = 1 ORDER BY nama_lokasi, ip");
+if ($csrfValid && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_all_devices'])) {
+    $all_devices_stmt = $conn->query('SELECT * FROM fingerprint_devices WHERE is_active = 1 ORDER BY nama_lokasi, ip');
     $all_devices = $all_devices_stmt->fetchAll(PDO::FETCH_ASSOC);
     $total_synced = 0;
     $all_warnings = [];
@@ -185,12 +192,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_all_devices'])) 
                     } else {
                         $role = 'siswa';
                     }
-                    $check_stmt = $conn->prepare("SELECT id, name, role FROM users WHERE uid = ?");
+                    $check_stmt = $conn->prepare('SELECT id, name, role FROM users WHERE uid = ?');
                     $check_stmt->execute([$uid]);
                     $user_db = $check_stmt->fetch(PDO::FETCH_ASSOC);
                     if (!$user_db) {
                         // Insert user baru
-                        $insert_stmt = $conn->prepare("INSERT INTO users (uid, name, role) VALUES (?, ?, ?)");
+                        $insert_stmt = $conn->prepare('INSERT INTO users (uid, name, role) VALUES (?, ?, ?)');
                         $insert_stmt->execute([$uid, $user_name, $role]);
                         $user_id_db = $conn->lastInsertId();
                         $synced_count++;
@@ -198,27 +205,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_all_devices'])) 
                         $user_id_db = $user_db['id'];
                         // Jika nama/role tidak cocok, update agar konsisten
                         if ($user_db['name'] !== $user_name || $user_db['role'] !== $role) {
-                            $update_stmt = $conn->prepare("UPDATE users SET name = ?, role = ? WHERE id = ?");
+                            $update_stmt = $conn->prepare('UPDATE users SET name = ?, role = ? WHERE id = ?');
                             $update_stmt->execute([$user_name, $role, $user_id_db]);
                         }
                     }
                     // Mapping ke guru/siswa
                     if ($role === 'siswa') {
-                        $siswa_stmt = $conn->prepare("SELECT id_siswa FROM siswa WHERE nis = ?");
+                        $siswa_stmt = $conn->prepare('SELECT id_siswa FROM siswa WHERE nis = ?');
                         $siswa_stmt->execute([$uid]);
                         $siswa = $siswa_stmt->fetch(PDO::FETCH_ASSOC);
                         if ($siswa) {
-                            $update_stmt = $conn->prepare("UPDATE siswa SET user_id = ? WHERE id_siswa = ? AND (user_id IS NULL OR user_id != ?)");
+                            $update_stmt = $conn->prepare('UPDATE siswa SET user_id = ? WHERE id_siswa = ? AND (user_id IS NULL OR user_id != ?)');
                             $update_stmt->execute([$user_id_db, $siswa['id_siswa'], $user_id_db]);
                         } else {
                             $warning_msgs[] = "UID $uid (Siswa) belum di-mapping ke data siswa manapun.";
                         }
                     } elseif ($role === 'guru') {
-                        $guru_stmt = $conn->prepare("SELECT id_guru FROM guru WHERE nip = ?");
+                        $guru_stmt = $conn->prepare('SELECT id_guru FROM guru WHERE nip = ?');
                         $guru_stmt->execute([$uid]);
                         $guru = $guru_stmt->fetch(PDO::FETCH_ASSOC);
                         if ($guru) {
-                            $update_stmt = $conn->prepare("UPDATE guru SET user_id = ? WHERE id_guru = ? AND (user_id IS NULL OR user_id != ?)");
+                            $update_stmt = $conn->prepare('UPDATE guru SET user_id = ? WHERE id_guru = ? AND (user_id IS NULL OR user_id != ?)');
                             $update_stmt->execute([$user_id_db, $guru['id_guru'], $user_id_db]);
                         } else {
                             $warning_msgs[] = "UID $uid (Guru) belum di-mapping ke data guru manapun.";
@@ -243,60 +250,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sync_all_devices'])) 
     $alert_class = 'alert-success';
 }
 // Handle map/unmap POST
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($csrfValid && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($_POST['action'] === 'map_guru' && !empty($_POST['id_guru']) && !empty($_POST['uid'])) {
-        $stmt = $conn->prepare("SELECT id FROM users WHERE uid = ?");
+        $stmt = $conn->prepare('SELECT id FROM users WHERE uid = ?');
         $stmt->execute([$_POST['uid']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($user) {
-            $update = $conn->prepare("UPDATE guru SET user_id = ? WHERE id_guru = ?");
+            $update = $conn->prepare('UPDATE guru SET user_id = ? WHERE id_guru = ?');
             $update->execute([$user['id'], $_POST['id_guru']]);
         }
     } elseif ($_POST['action'] === 'unmap_guru' && !empty($_POST['id_guru'])) {
-        $update = $conn->prepare("UPDATE guru SET user_id = NULL WHERE id_guru = ?");
+        $update = $conn->prepare('UPDATE guru SET user_id = NULL WHERE id_guru = ?');
         $update->execute([$_POST['id_guru']]);
     } elseif ($_POST['action'] === 'map_siswa' && !empty($_POST['id_siswa']) && !empty($_POST['uid'])) {
-        $stmt = $conn->prepare("SELECT id FROM users WHERE uid = ?");
+        $stmt = $conn->prepare('SELECT id FROM users WHERE uid = ?');
         $stmt->execute([$_POST['uid']]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($user) {
-            $update = $conn->prepare("UPDATE siswa SET user_id = ? WHERE id_siswa = ?");
+            $update = $conn->prepare('UPDATE siswa SET user_id = ? WHERE id_siswa = ?');
             $update->execute([$user['id'], $_POST['id_siswa']]);
         }
     } elseif ($_POST['action'] === 'unmap_siswa' && !empty($_POST['id_siswa'])) {
-        $update = $conn->prepare("UPDATE siswa SET user_id = NULL WHERE id_siswa = ?");
+        $update = $conn->prepare('UPDATE siswa SET user_id = NULL WHERE id_siswa = ?');
         $update->execute([$_POST['id_siswa']]);
     }
 }
 // Ambil data pengguna dari database
-$stmt = $conn->query("SELECT * FROM users ORDER BY name");
+$stmt = $conn->query('SELECT * FROM users ORDER BY name');
 $users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 // Ambil data siswa dan guru untuk dropdown
-$stmt_siswa = $conn->query("SELECT s.id_siswa, s.nama_siswa, s.nis, s.nisn, u.uid FROM siswa s LEFT JOIN users u ON s.user_id = u.id WHERE s.user_id IS NOT NULL ORDER BY s.nama_siswa");
+$stmt_siswa = $conn->query('SELECT s.id_siswa, s.nama_siswa, s.nis, s.nisn, u.uid FROM siswa s LEFT JOIN users u ON s.user_id = u.id WHERE s.user_id IS NOT NULL ORDER BY s.nama_siswa');
 $siswa_list = $stmt_siswa->fetchAll(PDO::FETCH_ASSOC);
-$stmt_guru = $conn->query("SELECT g.id_guru, g.nama_guru, g.nip, u.uid, u.name AS user_name FROM guru g LEFT JOIN users u ON g.user_id = u.id WHERE g.user_id IS NOT NULL ORDER BY g.nama_guru");
+$stmt_guru = $conn->query('SELECT g.id_guru, g.nama_guru, g.nip, u.uid, u.name AS user_name FROM guru g LEFT JOIN users u ON g.user_id = u.id WHERE g.user_id IS NOT NULL ORDER BY g.nama_guru');
 $guru_list = $stmt_guru->fetchAll(PDO::FETCH_ASSOC);
 $uid_used = [];
-foreach ($siswa_list as $s) { if ($s['uid']) $uid_used[] = $s['uid']; }
-foreach ($guru_list as $g) { if ($g['uid']) $uid_used[] = $g['uid']; }
+foreach ($siswa_list as $s) {
+    if ($s['uid'])
+        $uid_used[] = $s['uid'];
+}
+foreach ($guru_list as $g) {
+    if ($g['uid'])
+        $uid_used[] = $g['uid'];
+}
 $uid_used = array_unique($uid_used);
-$all_uid_stmt = $conn->query("SELECT uid FROM users ORDER BY uid");
+$all_uid_stmt = $conn->query('SELECT uid FROM users ORDER BY uid');
 $all_uid = $all_uid_stmt->fetchAll(PDO::FETCH_COLUMN);
 $uid_available = array_diff($all_uid, $uid_used);
 // Ambil daftar device fingerprint aktif
-$device_stmt = $conn->query("SELECT * FROM fingerprint_devices WHERE is_active = 1 ORDER BY nama_lokasi, ip");
+$device_stmt = $conn->query('SELECT * FROM fingerprint_devices WHERE is_active = 1 ORDER BY nama_lokasi, ip');
 $device_list = $device_stmt->fetchAll(PDO::FETCH_ASSOC);
 $tab = isset($_GET['tab']) ? $_GET['tab'] : 'kelola';
+
+$alert = [
+    'should_display' => !empty($message),
+    'class' => $alert_class ?: 'alert-info',
+    'message' => $message,
+];
+
 include '../../templates/layout_start.php';
 ?>
         <div class="container-fluid">
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display']): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <?php if ($tab === 'sinkronisasi'): ?>
                 <div class="row mb-3">
@@ -305,6 +320,7 @@ include '../../templates/layout_start.php';
                             <button type="submit" name="sync_all_devices" class="btn btn-info">
                                 <i class="fas fa-sync-alt"></i> Sinkronisasi Semua Device
                             </button>
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         </form>
                     </div>
                 </div>
@@ -317,6 +333,7 @@ include '../../templates/layout_start.php';
                             <div class="card-body">
                                 <form method="POST" action="">
                                     <input type="hidden" name="action" value="sync_users">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                     <div class="form-group">
                                         <label for="sync_device_ip">Device Fingerprint:</label>
                                         <select class="form-control" id="sync_device_ip" name="device_ip" required>
@@ -354,7 +371,7 @@ include '../../templates/layout_start.php';
                                             <tbody>
                                             <?php foreach ($guru_list as $i => $guru): ?>
                                                 <tr>
-                                                    <td><?= $i+1 ?></td>
+                                                    <td><?= $i + 1 ?></td>
                                                     <td><?php echo htmlspecialchars($guru['nama_guru'] ?: $guru['user_name']); ?></td>
                                                     <td><?= htmlspecialchars($guru['nip']) ?></td>
                                                     <td><?= $guru['uid'] ? htmlspecialchars($guru['uid']) : '-' ?></td>
@@ -362,12 +379,14 @@ include '../../templates/layout_start.php';
                                                         <?php if ($guru['uid']): ?>
                                                             <form method="POST" action="" style="display:inline;">
                                                                 <input type="hidden" name="action" value="unmap_guru">
+                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                                 <input type="hidden" name="id_guru" value="<?= $guru['id_guru'] ?>">
                                                                 <button type="submit" class="btn btn-danger btn-sm">Unmap</button>
                                                             </form>
                                                         <?php else: ?>
                                                             <form method="POST" action="" style="display:inline;">
                                                                 <input type="hidden" name="action" value="map_guru">
+                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                                 <input type="hidden" name="id_guru" value="<?= $guru['id_guru'] ?>">
                                                                 <select name="uid" class="form-control form-control-sm d-inline" style="width:auto;display:inline-block;">
                                                                     <option value="">Pilih UID</option>
@@ -395,7 +414,7 @@ include '../../templates/layout_start.php';
                                             <tbody>
                                             <?php foreach ($siswa_list as $i => $siswa): ?>
                                                 <tr>
-                                                    <td><?= $i+1 ?></td>
+                                                    <td><?= $i + 1 ?></td>
                                                     <td><?= htmlspecialchars($siswa['nama_siswa']) ?></td>
                                                     <td><?= htmlspecialchars($siswa['nis']) ?></td>
                                                     <td><?= $siswa['uid'] ? htmlspecialchars($siswa['uid']) : '-' ?></td>
@@ -403,12 +422,14 @@ include '../../templates/layout_start.php';
                                                         <?php if ($siswa['uid']): ?>
                                                             <form method="POST" action="" style="display:inline;">
                                                                 <input type="hidden" name="action" value="unmap_siswa">
+                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                                 <input type="hidden" name="id_siswa" value="<?= $siswa['id_siswa'] ?>">
                                                                 <button type="submit" class="btn btn-danger btn-sm">Unmap</button>
                                                             </form>
                                                         <?php else: ?>
                                                             <form method="POST" action="" style="display:inline;">
                                                                 <input type="hidden" name="action" value="map_siswa">
+                                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                                 <input type="hidden" name="id_siswa" value="<?= $siswa['id_siswa'] ?>">
                                                                 <select name="uid" class="form-control form-control-sm d-inline" style="width:auto;display:inline-block;">
                                                                     <option value="">Pilih UID</option>
@@ -450,6 +471,7 @@ include '../../templates/layout_start.php';
                             <div class="card-body">
                                 <form method="POST" action="">
                                     <input type="hidden" name="action" value="add_user">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                     <div class="form-group">
                                         <label for="device_ip">Device Fingerprint:</label>
                                         <select class="form-control" id="device_ip" name="device_ip" required>

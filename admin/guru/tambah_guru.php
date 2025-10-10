@@ -1,99 +1,83 @@
 <?php
-session_start();
-$title = "Tambah Guru";
-$active_page = "tambah_guru";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-include '../../includes/db.php';
-require '../../includes/zklib/zklibrary.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/zklib/zklibrary.php';
+require_once __DIR__ . '/../../includes/fingerprint_config.php';
 
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
-    exit;
-}
+$currentUser = admin_require_auth(['admin']);
 
-// Ambil data user dari device fingerprint untuk dropdown
-$fingerprint_users = [];
-include_once '../../includes/fingerprint_config.php';
-$device_ip = FINGERPRINT_IP; // Menggunakan IP dari konfigurasi
+$title = 'Tambah Guru';
+$active_page = 'tambah_guru';
+$required_role = 'admin';
 
-try {
-    $zk = new ZKLibrary($device_ip, 4370);
-    if ($zk->connect()) {
-        $zk->disableDevice();
-        $fingerprint_users = $zk->getUser();
-        $zk->enableDevice();
-        $zk->disconnect();
-    }
-} catch (Exception $e) {
-    // Jika gagal koneksi, tetap lanjut dengan form manual
-}
+$fingerprint_users = admin_fetch_fingerprint_users();
+
+$csrfToken = admin_get_csrf_token();
 
 $message = '';
-$alert_class = '';
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    try {
-        $conn->beginTransaction();
-        $nama_guru = $_POST['nama_guru'];
-        $nip = $_POST['nip'];
-        $uid = $_POST['uid'];
-        $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-        $jenis_kelamin = $_POST['jenis_kelamin'];
-        $tanggal_lahir = $_POST['tanggal_lahir'];
-        $alamat = $_POST['alamat'];
-        $phone = $_POST['phone']; // Tambahkan input Nomor WhatsApp
-        // Validasi NIP unik
-        $check_nip = $conn->prepare("SELECT id_guru FROM guru WHERE nip = ?");
-        $check_nip->execute(array($nip));
-        if ($check_nip->rowCount() > 0) {
-            throw new Exception("NIP sudah digunakan");
-        }
-        // Cek apakah UID sudah ada di users
-        $check_uid = $conn->prepare("SELECT id FROM users WHERE uid = ?");
-        $check_uid->execute(array($uid));
-        $user_id = null;
-        if ($row_uid = $check_uid->fetch(PDO::FETCH_ASSOC)) {
-            // UID sudah ada, update data user jika perlu
-            $user_id = $row_uid['id'];
-            $update_user = $conn->prepare("UPDATE users SET name = ?, password = ?, role = 'guru' WHERE id = ?");
-            $update_user->execute(array($nama_guru, $password, $user_id));
-        } else {
-            // UID belum ada, buat user baru
-        $stmt_user = $conn->prepare("INSERT INTO users (name, password, role, uid, phone) VALUES (?, ?, 'guru', ?, ?)");
-        $stmt_user->execute(array($nama_guru, $password, $uid, $phone));
-        $user_id = $conn->lastInsertId();
-        }
-        // Cek apakah user_id sudah termapping ke guru lain
-        $check_map = $conn->prepare("SELECT id_guru FROM guru WHERE user_id = ?");
-        $check_map->execute([$user_id]);
-        if ($check_map->rowCount() > 0) {
-            throw new Exception("UID sudah digunakan guru lain");
-        }
-        // Simpan data ke tabel guru dengan user_id
-        $stmt = $conn->prepare("INSERT INTO guru (nip, jenis_kelamin, tanggal_lahir, alamat, user_id) VALUES (?, ?, ?, ?, ?)");
-        $stmt->execute(array($nip, $jenis_kelamin, $tanggal_lahir, $alamat, $user_id));
-        $conn->commit();
-        header("Location: list_guru.php?status=add_success");
-        exit();
-    } catch (Exception $e) {
-        $conn->rollBack();
-        $message = $e->getMessage();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
         $alert_class = 'alert-danger';
+    } else {
+        try {
+            $conn->beginTransaction();
+            $nama_guru = $_POST['nama_guru'];
+            $nip = $_POST['nip'];
+            $uid = $_POST['uid'];
+            $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+            $jenis_kelamin = $_POST['jenis_kelamin'];
+            $tanggal_lahir = $_POST['tanggal_lahir'];
+            $alamat = $_POST['alamat'];
+            $phone = $_POST['phone'];
+            $check_nip = $conn->prepare('SELECT id_guru FROM guru WHERE nip = ?');
+            $check_nip->execute([$nip]);
+            if ($check_nip->rowCount() > 0) {
+                throw new Exception('NIP sudah digunakan');
+            }
+            $check_uid = $conn->prepare('SELECT id FROM users WHERE uid = ?');
+            $check_uid->execute([$uid]);
+            $user_id = null;
+            if ($row_uid = $check_uid->fetch(PDO::FETCH_ASSOC)) {
+                $user_id = $row_uid['id'];
+                $update_user = $conn->prepare("UPDATE users SET name = ?, password = ?, role = 'guru' WHERE id = ?");
+                $update_user->execute([$nama_guru, $password, $user_id]);
+            } else {
+                $stmt_user = $conn->prepare("INSERT INTO users (name, password, role, uid, phone) VALUES (?, ?, 'guru', ?, ?)");
+                $stmt_user->execute([$nama_guru, $password, $uid, $phone]);
+                $user_id = $conn->lastInsertId();
+            }
+            $check_map = $conn->prepare('SELECT id_guru FROM guru WHERE user_id = ?');
+            $check_map->execute([$user_id]);
+            if ($check_map->rowCount() > 0) {
+                throw new Exception('UID sudah digunakan guru lain');
+            }
+            $stmt = $conn->prepare('INSERT INTO guru (nip, jenis_kelamin, tanggal_lahir, alamat, user_id) VALUES (?, ?, ?, ?, ?)');
+            $stmt->execute([$nip, $jenis_kelamin, $tanggal_lahir, $alamat, $user_id]);
+            $conn->commit();
+            header('Location: list_guru.php?status=add_success');
+            exit();
+        } catch (Exception $e) {
+            $conn->rollBack();
+            $message = $e->getMessage();
+            $alert_class = 'alert-danger';
+        }
     }
 }
+
+$alert = [
+    'should_display' => !empty($message),
+    'class' => $alert_class ?: 'alert-info',
+    'message' => $message,
+];
+
+include '../../templates/layout_start.php';
+
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
-            <!-- <h1 class="h3 mb-4 text-gray-800">Tambah Guru</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo htmlspecialchars($message); ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display']): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">
@@ -103,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <div class="form-group">
                                     <label>UID (Fingerprint):</label>
                                     <select name="uid" id="uid_select" class="form-control" required>
@@ -110,9 +95,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                         <?php if (!empty($fingerprint_users)): ?>
                                             <?php foreach ($fingerprint_users as $user): ?>
                                                 <?php
-                                                    // Filter hanya privilege 0 (User)
-                                                    $privilege = isset($user[2]) ? intval($user[2]) : 0;
-                                                    if ($privilege !== 0) continue;
+                                                // Filter hanya privilege 0 (User)
+                                                $privilege = isset($user[2]) ? intval($user[2]) : 0;
+                                                if ($privilege !== 0)
+                                                    continue;
                                                 ?>
                                                 <option value="<?= htmlspecialchars($user[0]) ?>" data-name="<?= htmlspecialchars($user[1]) ?>" data-role="<?= htmlspecialchars($privilege) ?>">
                                                     <?= htmlspecialchars($user[0]) ?> - <?= htmlspecialchars($user[1]) ?>
@@ -170,10 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         </div>
     </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<?php include '../../templates/scripts.php'; ?>
+<?php include '../../templates/layout_end.php'; ?>
 
 <script>
     // Auto-fill nama berdasarkan UID yang dipilih

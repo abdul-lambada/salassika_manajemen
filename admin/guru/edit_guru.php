@@ -1,86 +1,104 @@
 <?php
-ob_start();
-session_start();
-$title = "Edit Guru";
-$active_page = "edit_guru";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/zklib/zklibrary.php';
+require_once __DIR__ . '/../../includes/fingerprint_config.php';
 
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+$currentUser = admin_require_auth(['admin']);
+
+$title = 'Edit Guru';
+$active_page = 'edit_guru';
+$required_role = 'admin';
+
+$id_guru = (int)($_GET['id'] ?? 0);
+if ($id_guru <= 0) {
+    header('Location: list_guru.php?status=error&msg=' . urlencode('Guru tidak ditemukan.'));
     exit;
 }
 
-$id_guru = $_GET['id'];
-$stmt = $conn->prepare("SELECT * FROM guru WHERE id_guru = :id_guru");
-$stmt->bindParam(':id_guru', $id_guru);
+$stmt = $conn->prepare('SELECT * FROM guru WHERE id_guru = :id_guru');
+$stmt->bindParam(':id_guru', $id_guru, PDO::PARAM_INT);
 $stmt->execute();
 $guru = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Ambil data user terkait
+if (!$guru) {
+    header('Location: list_guru.php?status=error&msg=' . urlencode('Guru tidak ditemukan.'));
+    exit;
+}
+
 $user = null;
 if (!empty($guru['user_id'])) {
-    $stmt_user = $conn->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt_user = $conn->prepare('SELECT * FROM users WHERE id = ?');
     $stmt_user->execute([$guru['user_id']]);
     $user = $stmt_user->fetch(PDO::FETCH_ASSOC);
 }
 
 $message = '';
 $alert_class = '';
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    try {
-        $conn->beginTransaction();
-        // Ambil data dari form
-        $nama_guru = $_POST['nama_guru'];
-        $nip = $_POST['nip'];
-        $uid = $_POST['uid'];
-        $jenis_kelamin = $_POST['jenis_kelamin'];
-        $tanggal_lahir = $_POST['tanggal_lahir'];
-        $alamat = $_POST['alamat'];
-        $password = !empty($_POST['password']) ? password_hash($_POST['password'], PASSWORD_DEFAULT) : $user['password'];
-        // Validasi NIP unik
-        $check_nip = $conn->prepare("SELECT id_guru FROM guru WHERE nip = ? AND id_guru != ?");
-        $check_nip->execute([$nip, $id_guru]);
-        if ($check_nip->rowCount() > 0) {
-            throw new Exception("NIP sudah digunakan oleh guru lain");
-        }
-        // Validasi UID unik di users
-        if ($uid !== $user['uid']) {
-            $check_uid = $conn->prepare("SELECT id FROM users WHERE uid = ? AND id != ?");
-            $check_uid->execute([$uid, $user['id']]);
-            if ($check_uid->rowCount() > 0) {
-                throw new Exception("UID sudah digunakan user lain");
-            }
-        }
-        // Update data di tabel guru
-        $stmt = $conn->prepare("UPDATE guru SET nip = ?, jenis_kelamin = ?, tanggal_lahir = ?, alamat = ? WHERE id_guru = ?");
-        $stmt->execute([$nip, $jenis_kelamin, $tanggal_lahir, $alamat, $id_guru]);
-        // Update data di tabel users
-        $stmt_user = $conn->prepare("UPDATE users SET name = ?, password = ?, uid = ?, phone = ? WHERE id = ?");
-        $stmt_user->execute([$nama_guru, $password, $uid, $_POST['phone'], $user['id']]);
-        $conn->commit();
-        header("Location: list_guru.php?status=edit_success");
-        exit();
-    } catch (Exception $e) {
-        $conn->rollBack();
-        $message = $e->getMessage();
+$csrfToken = admin_get_csrf_token();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
         $alert_class = 'alert-danger';
+    } else {
+        try {
+            $conn->beginTransaction();
+            $nama_guru = $_POST['nama_guru'];
+            $nip = $_POST['nip'];
+            $uid = $_POST['uid'];
+            $jenis_kelamin = $_POST['jenis_kelamin'];
+            $tanggal_lahir = $_POST['tanggal_lahir'];
+            $alamat = $_POST['alamat'];
+            $phone = $_POST['phone'];
+            $password = !empty($_POST['password']) ? password_hash($_POST['password'], PASSWORD_DEFAULT) : ($user['password'] ?? '');
+
+            $check_nip = $conn->prepare('SELECT id_guru FROM guru WHERE nip = ? AND id_guru != ?');
+            $check_nip->execute([$nip, $id_guru]);
+            if ($check_nip->rowCount() > 0) {
+                throw new Exception('NIP sudah digunakan oleh guru lain');
+            }
+
+            if ($user && $uid !== $user['uid']) {
+                $check_uid = $conn->prepare('SELECT id FROM users WHERE uid = ? AND id != ?');
+                $check_uid->execute([$uid, $user['id']]);
+                if ($check_uid->rowCount() > 0) {
+                    throw new Exception('UID sudah digunakan user lain');
+                }
+            }
+
+            $stmt = $conn->prepare('UPDATE guru SET nip = ?, jenis_kelamin = ?, tanggal_lahir = ?, alamat = ? WHERE id_guru = ?');
+            $stmt->execute([$nip, $jenis_kelamin, $tanggal_lahir, $alamat, $id_guru]);
+
+            if ($user) {
+                $stmt_user = $conn->prepare('UPDATE users SET name = ?, password = ?, uid = ?, phone = ? WHERE id = ?');
+                $stmt_user->execute([$nama_guru, $password, $uid, $phone, $user['id']]);
+            }
+
+            $conn->commit();
+            header('Location: list_guru.php?status=edit_success');
+            exit;
+        } catch (Exception $e) {
+            $conn->rollBack();
+            $message = $e->getMessage();
+            $alert_class = 'alert-danger';
+        }
     }
 }
+
+$fingerprint_users = admin_fetch_fingerprint_users();
+
+$alert = [
+    'should_display' => !empty($message),
+    'class' => $alert_class ?: 'alert-info',
+    'message' => $message,
+];
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
-            <!-- <h1 class="h3 mb-4 text-gray-800">Edit Guru</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo htmlspecialchars($message); ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display']): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">
@@ -90,6 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <div class="form-group">
                                     <label>Nama Guru:</label>
                                     <input type="text" name="nama_guru" class="form-control" value="<?php echo htmlspecialchars($user['name']); ?>" required>
@@ -166,11 +185,4 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         </div>
     </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
-
-<?php include '../../templates/scripts.php'; ?>
-
-<?php
-ob_end_flush();
-?>
+<?php include '../../templates/layout_end.php'; ?>

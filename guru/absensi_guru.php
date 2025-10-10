@@ -1,34 +1,19 @@
 <?php
-session_start();
-// Load global configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
-include_once '../includes/email_util.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
+require_once __DIR__ . '/../includes/email_util.php';
 
-// Periksa apakah sesi 'user' tersedia
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'guru') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$currentUser = admin_require_auth(['guru']);
 
 $active_page = "absensi_guru"; // Untuk menandai menu aktif di sidebar
+$title = "Absensi Guru";
+$required_role = 'guru';
+$csrfToken = admin_get_csrf_token();
 $message = ''; // Variabel untuk menyimpan pesan sukses
+$today = date('Y-m-d');
 
-// CSRF protection
-if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
-}
 function csrf_check() {
-    if (!isset($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
         throw new Exception('Invalid CSRF token');
     }
 }
@@ -39,17 +24,44 @@ try {
     $stmt_guru->execute();
     $guru_list = $stmt_guru->fetchAll(PDO::FETCH_ASSOC);
 
+    $userToGuru = [];
+    foreach ($guru_list as $guruRow) {
+        $idGuru = (int)($guruRow['id_guru'] ?? 0);
+        $userId = $guruRow['user_id'] ?? null;
+        if ($idGuru > 0 && $userId !== null) {
+            $userToGuru[(int)$userId] = $idGuru;
+        }
+    }
+
+    $stmt_fp_today = $conn->prepare("
+        SELECT user_id, timestamp, verification_mode, status
+        FROM tbl_kehadiran
+        WHERE DATE(timestamp) = :today
+        ORDER BY timestamp ASC
+    ");
+    $stmt_fp_today->execute([':today' => $today]);
+    $fingerprintByGuru = [];
+    while ($row = $stmt_fp_today->fetch(PDO::FETCH_ASSOC)) {
+        $userId = (int)($row['user_id'] ?? 0);
+        if ($userId === 0 || !isset($userToGuru[$userId])) {
+            continue;
+        }
+        $idGuru = $userToGuru[$userId];
+        if (!isset($fingerprintByGuru[$idGuru])) {
+            $fingerprintByGuru[$idGuru] = $row;
+        }
+    }
+
     // Jika form absensi disubmit
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_absensi'])) {
         csrf_check();
-        $tanggal = date('Y-m-d');
+        $tanggal = $today;
         $error = false;
         foreach ($_POST['status'] as $id_guru => $status_kehadiran) {
+            $id_guru = (int)$id_guru;
             // Cek apakah guru sudah fingerprint hari ini
-            $stmt_fp = $conn->prepare("SELECT timestamp FROM guru g LEFT JOIN users u ON g.user_id = u.id LEFT JOIN tbl_kehadiran kh ON u.id = kh.user_id AND DATE(kh.timestamp) = ? WHERE g.id_guru = ? LIMIT 1");
-            $stmt_fp->execute([$tanggal, $id_guru]);
-            $fingerprint = $stmt_fp->fetch(PDO::FETCH_ASSOC);
-            if ($fingerprint && $fingerprint['timestamp']) {
+            $fingerprint = $fingerprintByGuru[$id_guru] ?? null;
+            if ($fingerprint && ($fingerprint['timestamp'] ?? null)) {
                 // Jika fingerprint sudah ada, abaikan input manual
                 continue;
             }
@@ -67,7 +79,7 @@ try {
                     SET status_kehadiran = :status_kehadiran, catatan = :catatan 
                     WHERE id_guru = :id_guru AND tanggal = :tanggal
                 ");
-                $catatan = htmlspecialchars($_POST['catatan'][$id_guru]);
+                $catatan = trim((string)($_POST['catatan'][$id_guru] ?? ''));
                 $stmt_update->bindParam(':id_guru', $id_guru);
                 $stmt_update->bindParam(':tanggal', $tanggal);
                 $stmt_update->bindParam(':status_kehadiran', $status_kehadiran);
@@ -79,7 +91,7 @@ try {
                     INSERT INTO absensi_guru (id_guru, tanggal, status_kehadiran, catatan)
                     VALUES (:id_guru, :tanggal, :status_kehadiran, :catatan)
                 ");
-                $catatan = htmlspecialchars($_POST['catatan'][$id_guru]);
+                $catatan = trim((string)($_POST['catatan'][$id_guru] ?? ''));
                 $stmt_insert->bindParam(':id_guru', $id_guru);
                 $stmt_insert->bindParam(':tanggal', $tanggal);
                 $stmt_insert->bindParam(':status_kehadiran', $status_kehadiran);
@@ -106,6 +118,12 @@ try {
     }
 
     // Ambil data guru dengan informasi fingerprint hari ini
+    // Ambil pengaturan jam kerja
+    $jam_kerja_stmt = $conn->query("SELECT * FROM tbl_jam_kerja WHERE id = 1");
+    $jam_kerja = $jam_kerja_stmt->fetch(PDO::FETCH_ASSOC);
+    $jam_masuk = $jam_kerja ? $jam_kerja['jam_masuk'] : '06:30:00';
+    $toleransi = $jam_kerja ? (int)$jam_kerja['toleransi_telat_menit'] : 5;
+
     $stmt_guru_fingerprint = $conn->prepare("
         SELECT 
             g.id_guru,
@@ -115,25 +133,44 @@ try {
             u.id as user_id,
             u.uid as fingerprint_uid,
             u.name AS user_name,
-            kh.timestamp AS waktu_fingerprint,
-            kh.verification_mode AS mode_verifikasi,
-            kh.status AS status_fingerprint,
             ag.status_kehadiran AS status_manual,
             ag.catatan AS catatan_manual
         FROM guru g
         LEFT JOIN users u ON g.user_id = u.id
-        LEFT JOIN tbl_kehadiran kh ON u.id = kh.user_id AND DATE(kh.timestamp) = CURDATE()
-        LEFT JOIN absensi_guru ag ON g.id_guru = ag.id_guru AND ag.tanggal = CURDATE()
+        LEFT JOIN absensi_guru ag ON g.id_guru = ag.id_guru AND ag.tanggal = :today
         ORDER BY g.nama_guru
     ");
-    $stmt_guru_fingerprint->execute();
-    $guru_fingerprint_list = $stmt_guru_fingerprint->fetchAll(PDO::FETCH_ASSOC);
+    $stmt_guru_fingerprint->execute([':today' => $today]);
+    $guru_fingerprint_list = [];
+    while ($guru = $stmt_guru_fingerprint->fetch(PDO::FETCH_ASSOC)) {
+        $idGuru = (int)($guru['id_guru'] ?? 0);
+        $fingerprint = $fingerprintByGuru[$idGuru] ?? null;
+        $waktuFingerprint = $fingerprint['timestamp'] ?? null;
+        $modeVerifikasi = $fingerprint['verification_mode'] ?? null;
+        $statusFingerprint = $fingerprint['status'] ?? null;
 
-    // Ambil pengaturan jam kerja
-    $jam_kerja_stmt = $conn->query("SELECT * FROM tbl_jam_kerja WHERE id = 1");
-    $jam_kerja = $jam_kerja_stmt->fetch(PDO::FETCH_ASSOC);
-    $jam_masuk = $jam_kerja ? $jam_kerja['jam_masuk'] : '06:30:00';
-    $toleransi = $jam_kerja ? (int)$jam_kerja['toleransi_telat_menit'] : 5;
+        $statusAutomatic = null;
+        $disableManual = false;
+        if ($waktuFingerprint !== null) {
+            $fingerprintTime = strtotime($waktuFingerprint);
+            $expectedTime = strtotime($today . ' ' . $jam_masuk);
+            $allowedDelay = $expectedTime + ($toleransi * 60);
+            if ($fingerprintTime <= $allowedDelay) {
+                $statusAutomatic = 'Hadir';
+            } else {
+                $statusAutomatic = 'Telat';
+            }
+            $disableManual = true;
+        }
+
+        $guru_fingerprint_list[] = array_merge($guru, [
+            'waktu_fingerprint' => $waktuFingerprint,
+            'mode_verifikasi' => $modeVerifikasi,
+            'status_fingerprint' => $statusFingerprint,
+            'status_automatic' => $statusAutomatic,
+            'disable_manual' => $disableManual,
+        ]);
+    }
 
     // Statistik absensi guru hari ini
     $stmt_stats = $conn->prepare("
@@ -200,18 +237,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
     exit;
 }
 ?>
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Absensi Guru - Management Salassika</title>
-    <link rel="icon" type="image/jpeg" href="../assets/img/logo.jpg">
-    <link href="../vendor/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <link href="../css/sb-admin-2.css" rel="stylesheet">
-    <style>
+<?php include __DIR__ . '/../templates/layout_start.php'; ?>
+        <style>
         .fingerprint-status {
             font-size: 0.8em;
             padding: 2px 6px;
@@ -230,16 +257,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
             font-size: 0.7em;
         }
     </style>
-</head>
-
-<body id="page-top">
-    <?php include __DIR__ . '/../templates/header.php'; ?>
-    <?php include __DIR__ . '/../templates/sidebar.php'; ?>
-    <div id="content-wrapper" class="d-flex flex-column">
-        <div id="content">
-            
-            <?php include __DIR__ . '/../templates/navbar.php'; ?>
-            <div class="container-fluid">
+        <div class="container-fluid">
                 <!-- Tampilkan pesan sukses jika ada -->
                 <?php if (!empty($message)): ?>
                     <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -357,7 +375,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
                     </div>
                     <div class="card-body">
                         <form method="POST" action="">
-                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                             <div class="table-responsive">
                                 <table class="table table-bordered table-hover">
                                     <thead class="thead-light">
@@ -379,33 +397,9 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
                                                 </td>
                                                 <td><?php echo htmlspecialchars($guru['nip']); ?></td>
                                                 <td>
-                                                    <?php
-                                                    // Cek apakah guru sudah fingerprint hari ini
-                                                    $today = date('Y-m-d');
-                                                    $stmt_fp = $conn->prepare("SELECT timestamp FROM tbl_kehadiran WHERE user_id = ? AND DATE(timestamp) = ? LIMIT 1");
-                                                    $stmt_fp->execute([$guru['user_id'], $today]);
-                                                    $fingerprint = $stmt_fp->fetch(PDO::FETCH_ASSOC);
-
-                                                    // Logika status otomatis
-                                                    $status_kehadiran = '';
-                                                    $disable_manual = false;
-                                                    if ($fingerprint) {
-                                                        // Cek jam masuk dan toleransi (misal jam 07:00, toleransi 15 menit)
-                                                        $jam_masuk = '07:00:00';
-                                                        $toleransi = 15 * 60; // 15 menit dalam detik
-                                                        $waktu_fp = strtotime($fingerprint['timestamp']);
-                                                        $waktu_masuk = strtotime($today . ' ' . $jam_masuk);
-                                                        if ($waktu_fp <= $waktu_masuk + $toleransi) {
-                                                            $status_kehadiran = 'Hadir';
-                                                        } else {
-                                                            $status_kehadiran = 'Telat';
-                                                        }
-                                                        $disable_manual = true;
-                                                    }
-                                                    ?>
-                                                    <?php if ($fingerprint): ?>
+                                                    <?php if (!empty($guru['waktu_fingerprint'])): ?>
                                                         <span class="fingerprint-badge">
-                                                            <i class="fas fa-fingerprint"></i> <?php echo date('H:i', strtotime($fingerprint['timestamp'])); ?>
+                                                            <i class="fas fa-fingerprint"></i> <?php echo date('H:i', strtotime($guru['waktu_fingerprint'])); ?>
                                                         </span>
                                                         <br>
                                                         <small class="text-muted"><?php echo htmlspecialchars($guru['mode_verifikasi']); ?></small>
@@ -414,22 +408,29 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
-                                                    <select name="status[<?php echo $guru['id_guru']; ?>]" class="form-control" <?php echo $disable_manual ? 'disabled' : ''; ?>>
-                                                        <option value="Hadir" <?php echo ($guru['status_manual'] == 'Hadir' || $status_kehadiran == 'Hadir') ? 'selected' : ''; ?>>Hadir</option>
-                                                        <option value="Telat" <?php echo ($guru['status_manual'] == 'Telat' || $status_kehadiran == 'Telat') ? 'selected' : ''; ?>>Telat</option>
+                                                    <?php
+                                                    $statusAutomatic = $guru['status_automatic'] ?? '';
+                                                    $disableManual = !empty($guru['disable_manual']);
+                                                    ?>
+                                                    <select name="status[<?php echo $guru['id_guru']; ?>]" class="form-control" <?php echo $disableManual ? 'disabled' : ''; ?>>
+                                                        <option value="Hadir" <?php echo (($guru['status_manual'] == 'Hadir') || ($statusAutomatic == 'Hadir')) ? 'selected' : ''; ?>>Hadir</option>
+                                                        <option value="Telat" <?php echo (($guru['status_manual'] == 'Telat') || ($statusAutomatic == 'Telat')) ? 'selected' : ''; ?>>Telat</option>
                                                         <option value="Izin" <?php echo ($guru['status_manual'] == 'Izin') ? 'selected' : ''; ?>>Izin</option>
                                                         <option value="Sakit" <?php echo ($guru['status_manual'] == 'Sakit') ? 'selected' : ''; ?>>Sakit</option>
                                                         <option value="Alfa" <?php echo ($guru['status_manual'] == 'Alfa') ? 'selected' : ''; ?>>Alfa</option>
                                                     </select>
-                                                    <?php if ($disable_manual): ?>
-                                                        <input type="hidden" name="status[<?php echo $guru['id_guru']; ?>]" value="<?php echo $status_kehadiran; ?>">
+                                                    <?php if ($disableManual): ?>
+                                                        <input type="hidden" name="status[<?php echo $guru['id_guru']; ?>]" value="<?php echo htmlspecialchars($statusAutomatic ?: 'Hadir'); ?>">
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
                                                     <input type="text" name="catatan[<?php echo $guru['id_guru']; ?>]" 
                                                            class="form-control" placeholder="Catatan" 
                                                            value="<?php echo htmlspecialchars(isset($guru['catatan_manual']) ? $guru['catatan_manual'] : ''); ?>"
-                                                           <?php echo $disable_manual ? 'disabled' : ''; ?>>
+                                                           <?php echo $disableManual ? 'disabled' : ''; ?>>
+                                                    <?php if ($disableManual): ?>
+                                                        <input type="hidden" name="catatan[<?php echo $guru['id_guru']; ?>]" value="<?php echo htmlspecialchars(isset($guru['catatan_manual']) ? $guru['catatan_manual'] : ''); ?>">
+                                                    <?php endif; ?>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -519,9 +520,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
                 </div>
             </div>
         </div>
-        <?php include __DIR__ . '/../templates/footer.php'; ?>
-    </div>
-    <div id="badge-fingerprint" class="badge badge-warning mb-2" style="display:none;">Ada Absen Fingerprint Baru!</div>
+        <div id="badge-fingerprint" class="badge badge-warning mb-2" style="display:none;">Ada Absen Fingerprint Baru!</div>
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>
     <script>
 // Polling AJAX fingerprint baru
 setInterval(function() {

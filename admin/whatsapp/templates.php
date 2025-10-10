@@ -1,17 +1,14 @@
 <?php
-session_start();
-if (!isset($_SESSION['user'])) {
-    header("Location: ../../auth/login.php");
-    exit;
-}
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/wa_util.php';
+
+$currentUser = admin_require_auth(['admin']);
+
 $title = "Template Pesan WhatsApp";
 $active_page = "whatsapp_templates";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
-
-// Koneksi ke database
-include '../../includes/db.php';
-require_once __DIR__ . '/../../includes/wa_util.php';
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
 
 $waService = new WhatsAppService($conn);
 
@@ -21,7 +18,10 @@ $alert_class = '';
 
 // Handle form submission untuk menambah/edit template
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $alert_class = 'alert-danger';
+    } elseif (isset($_POST['action'])) {
         try {
             if ($_POST['action'] === 'add') {
                 $name = trim($_POST['name']);
@@ -118,14 +118,9 @@ try {
     $alert_class = 'alert-danger';
     $templates = [];
 }
+include '../../templates/layout_start.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
-        
         <div class="container-fluid">
-            <!-- Begin Alert SB Admin 2 -->
             <?php if (!empty($message)): ?>
                 <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
                     <?php echo $message; ?>
@@ -134,7 +129,6 @@ try {
                     </button>
                 </div>
             <?php endif; ?>
-            <!-- End Alert SB Admin 2 -->
             
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800">Template Pesan WhatsApp</h1>
@@ -234,6 +228,7 @@ try {
                                                 <form method="post">
                                                     <div class="modal-body">
                                                         <input type="hidden" name="action" value="edit">
+                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                         <input type="hidden" name="id" value="<?php echo $template['id']; ?>">
                                                         
                                                         <div class="form-group">
@@ -322,6 +317,7 @@ try {
             <form method="post">
                 <div class="modal-body">
                     <input type="hidden" name="action" value="add">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                     
                     <div class="form-group">
                         <label for="name">Nama Template <span class="text-danger">*</span></label>
@@ -383,7 +379,7 @@ try {
     </div>
 </div>
 
-<?php include __DIR__ . '/../../templates/scripts.php'; ?>
+<?php include '../../templates/layout_end.php'; ?>
 
 <script>
 $(document).ready(function() {
@@ -398,10 +394,11 @@ $(document).ready(function() {
 
 function deleteTemplate(id, name) {
     if (confirm('Apakah Anda yakin ingin menghapus template "' + name + '"? Tindakan ini tidak dapat dibatalkan.')) {
-        var form = document.createElement('form');
+        const form = document.createElement('form');
         form.method = 'POST';
         form.innerHTML = '<input type="hidden" name="action" value="delete">' +
-                        '<input type="hidden" name="id" value="' + id + '">';
+            '<input type="hidden" name="id" value="' + id + '">' +
+            '<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">';
         document.body.appendChild(form);
         form.submit();
     }

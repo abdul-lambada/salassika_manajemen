@@ -1,23 +1,20 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-// Load configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
 include '../includes/process_fingerprint_attendance.php';
+$currentUser = admin_require_auth(['admin']);
 $title = "Sinkronisasi Absensi";
 $active_page = "jalankan_sinkronisasi";
 $required_role = 'admin';
 include __DIR__ . '/../templates/layout_start.php';
 
+$csrfToken = admin_get_csrf_token();
+
 $output_message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_sync'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $output_message .= "Token CSRF tidak valid. Proses dibatalkan.";
+    } else {
     // Jalankan migrasi kolom jika belum ada
     try {
         $conn->query("SELECT is_processed FROM tbl_kehadiran LIMIT 1");
@@ -35,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_sync'])) {
     
     // Panggil fungsi pemroses dan tangkap outputnya
     $output_message .= nl2br(htmlspecialchars(processFingerprintAttendance()));
+    }
 }
 
 ?>
@@ -54,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_sync'])) {
                         Proses ini aman untuk dijalankan berkali-kali. Data yang sudah diproses tidak akan diproses ulang.
                     </p>
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         <button type="submit" name="run_sync" class="btn btn-primary">
                             <i class="fas fa-sync-alt fa-fw"></i> Jalankan Sinkronisasi
                         </button>

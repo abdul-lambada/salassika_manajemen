@@ -1,22 +1,29 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+if (!isset($currentUser)) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    $currentUser = $GLOBALS['currentUser'] ?? ($_SESSION['user'] ?? null);
 }
-$baseUrl = defined('APP_URL') ? APP_URL : '';
-if (!isset($_SESSION['user'])) {
-    $login = $baseUrl ? $baseUrl . '/auth/login.php' : '/auth/login.php';
-    header('Location: ' . $login);
+
+if (!is_array($currentUser) || empty($currentUser)) {
+    header('Location: ' . admin_login_url());
     exit;
 }
-$userRole = strtolower($_SESSION['user']['role'] ?? '');
+
+$GLOBALS['currentUser'] = $currentUser;
+$GLOBALS['currentUserRole'] = strtolower($currentUser['role'] ?? '');
+
+$userRole = strtolower($currentUser['role'] ?? '');
+
 if (isset($required_role) && $required_role) {
     $expectedRole = strtolower($required_role);
     if ($userRole !== $expectedRole) {
-        $login = $baseUrl ? $baseUrl . '/auth/login.php' : '/auth/login.php';
-        header('Location: ' . $login);
+        header('Location: ' . admin_login_url('access_denied'));
         exit;
     }
 }
+
 include __DIR__ . '/header.php';
 include __DIR__ . '/sidebar.php';
 ?>

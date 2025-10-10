@@ -1,47 +1,47 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
-    exit;
-}
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-include '../../includes/db.php';
-$message = '';
-$alert_class = '';
+$currentUser = admin_require_auth(['admin']);
+
+$csrfToken = admin_get_csrf_token();
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nama_jurusan = trim($_POST['nama_jurusan']);
-    if (!empty($nama_jurusan)) {
-        $stmt = $conn->prepare("INSERT INTO jurusan (nama_jurusan) VALUES (?)");
-        if ($stmt->execute([$nama_jurusan])) {
-            header('Location: list_jurusan.php?status=add_success');
-            exit;
-        } else {
-            $message = 'Gagal menambah jurusan.';
-            $alert_class = 'alert-danger';
-        }
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $message = 'Token CSRF tidak valid.';
+        $alertClass = 'alert-danger';
     } else {
-        $message = 'Nama jurusan tidak boleh kosong.';
-        $alert_class = 'alert-warning';
+        $nama_jurusan = trim($_POST['nama_jurusan'] ?? '');
+        if ($nama_jurusan !== '') {
+            $stmt = $conn->prepare("INSERT INTO jurusan (nama_jurusan) VALUES (?)");
+            if ($stmt->execute([$nama_jurusan])) {
+                header('Location: list_jurusan.php?status=add_success');
+                exit;
+            }
+            $message = 'Gagal menambahkan jurusan.';
+            $alertClass = 'alert-danger';
+        } else {
+            $message = 'Nama jurusan tidak boleh kosong.';
+            $alertClass = 'alert-warning';
+        }
     }
 }
 
+$alert = [
+    'should_display' => isset($message) && $message !== '',
+    'message' => $message ?? '',
+    'class' => $alertClass ?? 'alert-info',
+];
+
 $title = "Tambah Jurusan";
-$active_page = "tambah_jurusan";
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+$active_page = "list_jurusan";
+$required_role = 'admin';
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
-            <!-- <h1 class="h3 mb-4 text-gray-800">Tambah Jurusan</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display']): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">
@@ -51,6 +51,7 @@ include '../../templates/sidebar.php';
                         </div>
                         <div class="card-body">
                             <form method="POST" action="">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']); ?>">
                                 <div class="form-group">
                                     <label for="nama_jurusan">Nama Jurusan</label>
                                     <input type="text" class="form-control" id="nama_jurusan" name="nama_jurusan" required>
@@ -63,6 +64,4 @@ include '../../templates/sidebar.php';
                 </div>
             </div>
         </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>

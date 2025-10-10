@@ -1,43 +1,16 @@
 <?php
-session_start();
-// Load global configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin', 'guru']);
+$role = strtolower($currentUser['role'] ?? '');
+
 $title = "Dashboard Guru";
 $active_page = "dashboard";
-
-// Check if user is logged in
-if (!isset($_SESSION['user'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
-
-// Check if user has valid role
-$role = $_SESSION['user']['role'];
-if (!in_array($role, ['admin', 'guru'])) {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
-
-include __DIR__ . '/../templates/header.php';
-include __DIR__ . '/../templates/sidebar.php';
+$required_role = null; // allow both admin and guru
 
 // Tambahan: endpoint AJAX untuk polling fingerprint terbaru
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'fingerprint_status') {
-    include __DIR__ . '/../includes/db.php';
     $today = date('Y-m-d');
     $stmt = $conn->prepare("SELECT COUNT(*) as total FROM tbl_kehadiran WHERE DATE(timestamp) = ?");
     $stmt->execute([$today]);
@@ -72,7 +45,7 @@ if ($role === 'admin') {
     $device_status = 'Online'; // Placeholder, bisa dibuat dinamis jika ada pengecekan device
 } elseif ($role === 'guru') {
     $today = date('Y-m-d');
-    $id_guru = isset($_SESSION['user']['id_guru']) ? $_SESSION['user']['id_guru'] : null;
+    $id_guru = $currentUser['id_guru'] ?? null;
     $stats = [
         'Hadir' => 0,
         'Telat' => 0,
@@ -106,12 +79,9 @@ if ($role === 'admin') {
     // Menu tersedia (hitung menu sidebar untuk guru)
     $menu_tersedia = 7;
 }
-?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include __DIR__ . '/../templates/navbar.php'; ?>
-        
+include __DIR__ . '/../templates/layout_start.php';
+?>
         <div class="container-fluid">
             <!-- Page Heading -->
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
@@ -183,7 +153,7 @@ if ($role === 'admin') {
                     <div class="card shadow mb-4">
                         <div class="card-header py-3">
                             <h6 class="m-0 font-weight-bold text-primary">
-                                Selamat Datang, <?= htmlspecialchars($_SESSION['user']['name']) ?>!
+                                Selamat Datang, <?= htmlspecialchars($currentUser['name'] ?? '') ?>!
                             </h6>
                         </div>
                         <div class="card-body">
@@ -265,8 +235,7 @@ setInterval(function() {
             document.getElementById('badge-fingerprint').className = data.total_fp > 0 ? 'badge bg-success' : 'badge bg-secondary';
         });
 }, 10000);
-</script>
+</div>
 <?php endif; ?>
 
-</body>
-</html>
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>

@@ -1,5 +1,11 @@
 <?php
-$BASE = defined('APP_URL') ? APP_URL : '';
+if (!function_exists('template_asset')) {
+    function template_asset(string $path): string
+    {
+        $base = defined('APP_URL') ? rtrim(APP_URL, '/') : rtrim(admin_app_url(''), '/');
+        return $base . '/' . ltrim($path, '/');
+    }
+}
 ?>
 <!-- Core JS (CDNs) -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
@@ -25,7 +31,7 @@ $BASE = defined('APP_URL') ? APP_URL : '';
           // Try fallback CDNJS
           loadScript('https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.2/js/bootstrap.bundle.min.js', null, function(){
             // Try local vendor fallback
-            loadScript('<?= $BASE ?>/assets/vendor/bootstrap/bootstrap.bundle.min.js');
+            loadScript('<?= htmlspecialchars(template_asset('assets/vendor/bootstrap/bootstrap.bundle.min.js'), ENT_QUOTES, 'UTF-8'); ?>');
           });
         });
       }
@@ -33,7 +39,7 @@ $BASE = defined('APP_URL') ? APP_URL : '';
         // If jQuery still not present, load fallback then Bootstrap
         loadScript('https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js', loadBootstrapPrimary, function(){
           // Try local vendor jQuery then Bootstrap
-          loadScript('<?= $BASE ?>/assets/vendor/jquery/jquery-3.7.1.min.js', loadBootstrapPrimary, function(){
+          loadScript('<?= htmlspecialchars(template_asset('assets/vendor/jquery/jquery-3.7.1.min.js'), ENT_QUOTES, 'UTF-8'); ?>', loadBootstrapPrimary, function(){
             // If even fallback jQuery fails, still try Bootstrap (may fail gracefully)
             loadBootstrapPrimary();
           });
@@ -66,7 +72,7 @@ $BASE = defined('APP_URL') ? APP_URL : '';
     s.onerror = function(){
       console.warn('CDNJS Chart.js failed, trying local vendor...');
       var l = document.createElement('script');
-      l.src = '<?= $BASE ?>/assets/vendor/chartjs/Chart.min.js';
+      l.src = '<?= htmlspecialchars(template_asset('assets/vendor/chartjs/Chart.min.js'), ENT_QUOTES, 'UTF-8'); ?>';
       l.async = true;
       l.onload = function(){ console.info('Chart.js loaded from local vendor'); };
       l.onerror = function(){ console.error('Failed to load Chart.js from all sources'); };
@@ -82,6 +88,6 @@ $BASE = defined('APP_URL') ? APP_URL : '';
 </script>
 
 <!-- App Scripts (local) -->
-<script src="<?= $BASE ?>/assets/js/sb-admin-2.min.js"></script>
-<script src="<?= $BASE ?>/assets/js/enhanced-charts.js"></script>
-<script src="<?= $BASE ?>/assets/js/mobile-enhancements.js"></script>
+<script src="<?= htmlspecialchars(template_asset('assets/js/sb-admin-2.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script src="<?= htmlspecialchars(template_asset('assets/js/enhanced-charts.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script src="<?= htmlspecialchars(template_asset('assets/js/mobile-enhancements.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>

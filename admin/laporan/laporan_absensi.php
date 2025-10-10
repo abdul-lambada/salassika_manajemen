@@ -1,27 +1,15 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-// Load global configs
-if (file_exists(__DIR__ . '/../../includes/config.php')) {
-    include __DIR__ . '/../../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../../config/production.php')) {
-    include __DIR__ . '/../../config/production.php';
-}
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 include '../../includes/advanced_stats_helper.php';
 
-$role = strtolower($_SESSION['user']['role'] ?? '');
-if (!in_array($role, ['admin', 'guru'], true)) {
-    $login = defined('APP_URL') ? APP_URL . '/auth/login.php' : '../../auth/login.php';
-    header('Location: ' . $login);
-    exit;
-}
+$currentUser = admin_require_auth(['admin', 'guru']);
+$role = strtolower($currentUser['role'] ?? '');
 
 $title = 'Laporan Absensi';
 $active_page = 'laporan_absensi';
 $required_role = null; // admin & guru allowed
+$csrfToken = admin_get_csrf_token();
 
 // Filter parameters
 $tanggal_mulai = isset($_GET['tanggal_mulai']) ? $_GET['tanggal_mulai'] : date('Y-m-01');
@@ -174,6 +162,7 @@ include '../../templates/layout_start.php';
                 </div>
                 <div class="card-body">
                     <form method="GET" action="" class="row">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         <div class="col-md-2">
                             <label>Tanggal Mulai:</label>
                             <input type="date" name="tanggal_mulai" class="form-control" value="<?= $tanggal_mulai ?>">
@@ -309,10 +298,10 @@ include '../../templates/layout_start.php';
                 <div class="card-header py-3 d-flex justify-content-between align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary">Data Absensi</h6>
                     <div>
-                        <a href="export_excel.php?<?= http_build_query($_GET) ?>" class="btn btn-success btn-sm mr-2">
+                        <a href="export_excel.php?<?= http_build_query(array_merge($_GET, ['token' => $csrfToken])); ?>" class="btn btn-success btn-sm mr-2">
                             <i class="fas fa-file-excel"></i> Export Excel
                         </a>
-                        <a href="export_pdf.php?<?= http_build_query($_GET) ?>" class="btn btn-danger btn-sm">
+                        <a href="export_pdf.php?<?= http_build_query(array_merge($_GET, ['token' => $csrfToken])); ?>" class="btn btn-danger btn-sm">
                             <i class="fas fa-file-pdf"></i> Export PDF
                         </a>
                     </div>

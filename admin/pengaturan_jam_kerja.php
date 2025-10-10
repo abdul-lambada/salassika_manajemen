@@ -1,24 +1,13 @@
 <?php
-session_start();
-// Load configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin']);
+
 $title = "Pengaturan Jam Kerja";
 $active_page = "pengaturan_jam_kerja";
-
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
 
 $success = $error = '';
 
@@ -49,28 +38,28 @@ try {
 
 // Proses update data
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $jam_kerja) {
-    $jam_masuk = $_POST['jam_masuk'];
-    $jam_pulang = $_POST['jam_pulang'];
-    $toleransi = (int)$_POST['toleransi_telat_menit'];
-
-    $update_stmt = $conn->prepare("UPDATE tbl_jam_kerja SET jam_masuk = ?, jam_pulang = ?, toleransi_telat_menit = ? WHERE id = ?");
-    if ($update_stmt->execute([$jam_masuk, $jam_pulang, $toleransi, $jam_kerja['id']])) {
-        $success = "Pengaturan jam kerja berhasil diperbarui.";
-        // Refresh data
-        $stmt = $conn->query("SELECT * FROM tbl_jam_kerja WHERE id = 1");
-        $jam_kerja = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $error = "Token CSRF tidak valid.";
     } else {
-        $error = "Gagal memperbarui pengaturan.";
+        $jam_masuk = $_POST['jam_masuk'];
+        $jam_pulang = $_POST['jam_pulang'];
+        $toleransi = (int)$_POST['toleransi_telat_menit'];
+
+        $update_stmt = $conn->prepare("UPDATE tbl_jam_kerja SET jam_masuk = ?, jam_pulang = ?, toleransi_telat_menit = ? WHERE id = ?");
+        if ($update_stmt->execute([$jam_masuk, $jam_pulang, $toleransi, $jam_kerja['id']])) {
+            $success = "Pengaturan jam kerja berhasil diperbarui.";
+            // Refresh data
+            $stmt = $conn->query("SELECT * FROM tbl_jam_kerja WHERE id = 1");
+            $jam_kerja = $stmt->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $error = "Gagal memperbarui pengaturan.";
+        }
     }
 }
 
-include '../templates/header.php';
-include '../templates/sidebar.php';
+include __DIR__ . '/../templates/layout_start.php';
 ?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Pengaturan Jam Kerja</h1> -->
 
@@ -88,6 +77,7 @@ include '../templates/sidebar.php';
                 </div>
                 <div class="card-body">
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                         <div class="form-row">
                             <div class="form-group col-md-4">
                                 <label for="jam_masuk">Jam Masuk</label>
@@ -115,10 +105,6 @@ include '../templates/sidebar.php';
             </div>
             <?php endif; ?>
         </div>
-    </div>
-    <?php include __DIR__ . '/../templates/footer.php'; ?>
-</div>
-
-<?php include __DIR__ . '/../templates/scripts.php'; ?>
-</body>
-</html> 
+<?php
+include __DIR__ . '/../templates/layout_end.php';
+?>

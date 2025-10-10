@@ -1,19 +1,22 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user'])) {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin']);
+
 $title = "List Kelas";
 $active_page = "list_kelas";
 $required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
+
 // Pagination: retrieve current page and set limit
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($page < 1) {
+    $page = 1;
+}
 $limit = 10;
 $offset = ($page - 1) * $limit;
+
 // Ambil data Kelas dengan pagination
 $stmt = $conn->prepare("
     SELECT k.*, j.nama_jurusan 
@@ -25,46 +28,26 @@ $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $kelas_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 // Get total number of rows and compute total pages
-$countStmt = $conn->query("SELECT COUNT(*) as total FROM kelas");
-$totalRows = $countStmt->fetch(PDO::FETCH_ASSOC)['total'];
-$totalPages = ceil($totalRows / $limit);
-// Cek status dari query string
-$status = isset($_GET['status']) ? $_GET['status'] : '';
-$message = '';
-switch ($status) {
-    case 'add_success':
-        $message = 'Data kelas berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-        break;
-    case 'edit_success':
-        $message = 'Data kelas berhasil diperbarui.';
-        $alert_class = 'alert-warning';
-        break;
-    case 'delete_success':
-        $message = 'Data kelas berhasil dihapus.';
-        $alert_class = 'alert-danger';
-        break;
-    case 'error':
-        $message = isset($_GET['message']) ? $_GET['message'] : 'Terjadi kesalahan saat memproses data.';
-        $alert_class = 'alert-danger';
-        break;
-    default:
-        $message = '';
-        $alert_class = '';
-        break;
-}
+$totalRows = (int)$conn->query("SELECT COUNT(*) as total FROM kelas")->fetch(PDO::FETCH_ASSOC)['total'];
+$totalPages = max(1, (int)ceil($totalRows / $limit));
+
+$statusMap = [
+    'add_success' => ['message' => 'Data kelas berhasil ditambahkan.', 'class' => 'alert-success'],
+    'edit_success' => ['message' => 'Data kelas berhasil diperbarui.', 'class' => 'alert-warning'],
+    'delete_success' => ['message' => 'Data kelas berhasil dihapus.', 'class' => 'alert-danger'],
+    'error' => ['message' => admin_request_param('message', 'Terjadi kesalahan saat memproses data.'), 'class' => 'alert-danger'],
+];
+
+$alert = admin_build_alert($statusMap);
+
 include '../../templates/layout_start.php';
 ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">List Kelas</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display'] ?? false): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">
@@ -127,29 +110,17 @@ include '../../templates/layout_start.php';
                             <!-- Dynamic Pagination -->
                             <nav aria-label="Page navigation example">
                                 <ul class="pagination justify-content-end">
-                                    <?php if($page > 1): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page-1; ?>">Previous</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Previous</span>
-                                        </li>
-                                    <?php endif; ?>
-                                    <?php for($i=1; $i <= $totalPages; $i++): ?>
-                                        <li class="page-item <?php if($page==$i) echo 'active'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    <li class="page-item <?= $page > 1 ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= max(1, $page - 1) ?>">Previous</a>
+                                    </li>
+                                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                        <li class="page-item <?= $page === $i ? 'active' : '' ?>">
+                                            <a class="page-link" href="?page=<?= $i ?>"><?php echo $i; ?></a>
                                         </li>
                                     <?php endfor; ?>
-                                    <?php if($page < $totalPages): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page+1; ?>">Next</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Next</span>
-                                        </li>
-                                    <?php endif; ?>
+                                    <li class="page-item <?= $page < $totalPages ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= min($totalPages, $page + 1) ?>">Next</a>
+                                    </li>
                             </nav>
                         </div>
                     </div>
@@ -160,10 +131,11 @@ include '../../templates/layout_start.php';
     $(document).ready(function() {
         var namaKelasHapus = $('#namaKelasHapus');
         var btnHapusKelas = $('#btnHapusKelas');
+        var csrfToken = '<?= htmlspecialchars($csrfToken); ?>';
         $('.btn-hapus-kelas').on('click', function() {
             var id = $(this).data('id');
             var nama = $(this).data('nama');
-            var link = 'hapus_kelas.php?id=' + encodeURIComponent(id);
+            var link = 'hapus_kelas.php?id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(csrfToken);
             namaKelasHapus.text(nama);
             btnHapusKelas.attr('href', link);
         });

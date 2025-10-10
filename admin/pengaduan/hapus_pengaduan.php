@@ -1,46 +1,46 @@
 <?php
-session_start();
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-// Pastikan hanya admin yang dapat mengakses halaman ini
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
+$currentUser = admin_require_auth(['admin']);
+
+$id_pengaduan = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+$token = $_GET['token'] ?? '';
+
+if ($id_pengaduan <= 0 || !admin_validate_csrf($token)) {
+    header('Location: list_pengaduan.php?status=error');
     exit;
 }
 
-// Proses hapus data pengaduan
-if (isset($_GET['id'])) {
-    $id_pengaduan = $_GET['id'];
+try {
+    $conn->beginTransaction();
 
-    try {
-        // Ambil nama file pendukung sebelum menghapus data dari database
-        $stmt_get = $conn->prepare("SELECT file_pendukung FROM pengaduan WHERE id_pengaduan = :id_pengaduan");
-        $stmt_get->bindParam(':id_pengaduan', $id_pengaduan);
-        $stmt_get->execute();
-        $pengaduan = $stmt_get->fetch(PDO::FETCH_ASSOC);
+    $stmt_get = $conn->prepare('SELECT file_pendukung FROM pengaduan WHERE id_pengaduan = :id');
+    $stmt_get->bindParam(':id', $id_pengaduan, PDO::PARAM_INT);
+    $stmt_get->execute();
+    $pengaduan = $stmt_get->fetch(PDO::FETCH_ASSOC);
 
-        // Hapus file dari folder uploads jika ada
-        if ($pengaduan && !empty($pengaduan['file_pendukung'])) {
-            $file_path = '../../uploads/' . $pengaduan['file_pendukung'];
-            if (file_exists($file_path)) {
-                unlink($file_path);
-            }
-        }
-
-        // Query untuk menghapus data pengaduan berdasarkan ID
-        $stmt = $conn->prepare("DELETE FROM pengaduan WHERE id_pengaduan = :id_pengaduan");
-        $stmt->bindParam(':id_pengaduan', $id_pengaduan);
-        $stmt->execute();
-
-        // Redirect ke halaman list pengaduan dengan status delete_success
-        header("Location: list_pengaduan.php?status=delete_success");
-        exit();
-    } catch (\PDOException $e) {
-        // Redirect ke halaman list pengaduan dengan status error jika terjadi kesalahan
-        header("Location: list_pengaduan.php?status=error");
-        exit();
+    if (!$pengaduan) {
+        throw new Exception('Pengaduan tidak ditemukan.');
     }
-}
 
-exit;
-?>
+    if (!empty($pengaduan['file_pendukung'])) {
+        $file_path = realpath(__DIR__ . '/../../uploads/' . $pengaduan['file_pendukung']);
+        $uploadsDir = realpath(__DIR__ . '/../../uploads');
+        if ($file_path && strpos($file_path, $uploadsDir) === 0 && is_file($file_path)) {
+            @unlink($file_path);
+        }
+    }
+
+    $stmt = $conn->prepare('DELETE FROM pengaduan WHERE id_pengaduan = :id');
+    $stmt->bindParam(':id', $id_pengaduan, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $conn->commit();
+    header('Location: list_pengaduan.php?status=delete_success');
+    exit;
+} catch (Exception $e) {
+    $conn->rollBack();
+    header('Location: list_pengaduan.php?status=error&message=' . urlencode($e->getMessage()));
+    exit;
+}

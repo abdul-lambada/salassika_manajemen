@@ -1,6 +1,31 @@
 <?php
-$BASE = defined('APP_URL') ? APP_URL : '';
-$userName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'User';
+if (!function_exists('template_asset')) {
+    function template_asset(string $path): string
+    {
+        $base = defined('APP_URL') ? rtrim(APP_URL, '/') : rtrim(admin_app_url(''), '/');
+        return $base . '/' . ltrim($path, '/');
+    }
+}
+
+if (!function_exists('template_url')) {
+    function template_url(string $path = ''): string
+    {
+        $base = defined('APP_URL') ? rtrim(APP_URL, '/') : rtrim(admin_app_url(''), '/');
+        $trimmed = ltrim($path, '/');
+        return $base . ($trimmed !== '' ? '/' . $trimmed : '');
+    }
+}
+
+if (!isset($currentUser) || !is_array($currentUser)) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    $currentUser = $GLOBALS['currentUser'] ?? ($_SESSION['user'] ?? []);
+}
+
+$userName = $currentUser['name'] ?? 'User';
+$logoutUrl = template_url('auth/logout.php');
+$profileImage = $currentUser['avatar'] ?? template_asset('assets/img/undraw_profile.svg');
 ?>
 <!-- Topbar -->
 <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
@@ -55,8 +80,8 @@ $userName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'User
         <li class="nav-item dropdown no-arrow">
             <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
                 data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?= htmlspecialchars($userName) ?></span>
-                <img class="img-profile rounded-circle" src="<?= $BASE ?>/assets/img/undraw_profile.svg">
+                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?= htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?></span>
+                <img class="img-profile rounded-circle" src="<?= htmlspecialchars($profileImage, ENT_QUOTES, 'UTF-8'); ?>" alt="Foto Profil">
             </a>
             <!-- Dropdown - User Information -->
             <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in" aria-labelledby="userDropdown">
@@ -69,7 +94,7 @@ $userName = isset($_SESSION['user']['name']) ? $_SESSION['user']['name'] : 'User
                     Settings
                 </a>
                 <div class="dropdown-divider"></div>
-                <a class="dropdown-item" href="<?= $BASE ?>/auth/logout.php">
+                <a class="dropdown-item" href="<?= htmlspecialchars($logoutUrl, ENT_QUOTES, 'UTF-8'); ?>">
                     <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
                     Logout
                 </a>

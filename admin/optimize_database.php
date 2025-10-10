@@ -1,30 +1,21 @@
 <?php
-session_start();
-// Load configs
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include '../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../includes/admin_helpers.php';
 
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    if (defined('APP_URL')) {
-        header('Location: ' . APP_URL . '/auth/login.php');
-    } else {
-        header('Location: ../auth/login.php');
-    }
-    exit;
-}
+$currentUser = admin_require_auth(['admin']);
 
 $title = "Optimasi Database";
 $active_page = "optimize_database";
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
 
 $optimization_results = [];
 $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['optimize'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        $errors[] = 'Token CSRF tidak valid.';
+    } else {
     try {
         $conn->beginTransaction();
 
@@ -235,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['optimize'])) {
         $conn->rollBack();
         $errors[] = "✗ Error umum: " . $e->getMessage();
     }
+    }
 }
 
 // Get current index information
@@ -250,13 +242,9 @@ try {
     $errors[] = "Error mengambil informasi index: " . $e->getMessage();
 }
 
-include '../templates/header.php';
-include '../templates/sidebar.php';
+include __DIR__ . '/../templates/layout_start.php';
 ?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Optimasi Database</h1> -->
 
@@ -294,6 +282,7 @@ include '../templates/sidebar.php';
                             </ul>
                             
                             <form method="POST" action="" onsubmit="return confirm('Yakin ingin menjalankan optimasi database?')">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                 <button type="submit" name="optimize" class="btn btn-primary">
                                     <i class="fas fa-database"></i> Jalankan Optimasi
                                 </button>
@@ -327,9 +316,4 @@ include '../templates/sidebar.php';
                 </div>
             </div>
         </div>
-    </div>
-    <?php include '../templates/footer.php'; ?>
-</div>
-
-</body>
-</html> 
+<?php include __DIR__ . '/../templates/layout_end.php'; ?>

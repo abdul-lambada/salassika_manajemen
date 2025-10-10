@@ -1,18 +1,22 @@
 <?php
-session_start();
-include '../../includes/db.php';
-include '../../includes/advanced_stats_helper.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../includes/advanced_stats_helper.php';
 
-if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'guru'])) {
-    header("Location: ../auth/login.php");
-    exit;
-}
+$currentUser = admin_require_auth(['admin', 'guru']);
 
-$title = "Dashboard Real-time";
-$active_page = "dashboard_realtime";
+$title = 'Dashboard Real-time';
+$active_page = 'dashboard_realtime';
+$required_role = null;
+$csrfToken = admin_get_csrf_token();
 
 // AJAX request untuk data real-time
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'realtime') {
+    if (!admin_validate_csrf($_GET['token'] ?? null)) {
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode(['error' => 'Token tidak valid.']);
+        exit;
+    }
     try {
         // Statistik hari ini
         $stats_query = "
@@ -89,13 +93,8 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'realtime') {
     }
 }
 
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+include '../../templates/layout_start.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">Dashboard Real-time</h1> -->
             
@@ -206,11 +205,11 @@ include '../../templates/sidebar.php';
             </div>
         </div>
     </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>
 
 <script src="../assets/vendor/chart.js/Chart.js"></script>
 <script>
+const csrfToken = '<?= htmlspecialchars($csrfToken); ?>';
 let attendanceChart;
 let refreshInterval;
 
@@ -248,7 +247,11 @@ function initChart() {
 
 // Refresh data
 function refreshData() {
-    fetch('dashboard_realtime.php?ajax=realtime')
+    const url = new URL('dashboard_realtime.php', window.location.href);
+    url.searchParams.set('ajax', 'realtime');
+    url.searchParams.set('token', csrfToken);
+
+    fetch(url.toString())
         .then(response => response.json())
         .then(data => {
             // Update stats

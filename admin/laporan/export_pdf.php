@@ -1,13 +1,14 @@
 <?php
-session_start();
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+require_once __DIR__ . '/../../assets/vendor/fpdf/fpdf.php';
 
-if (!isset($_SESSION['user']) || !in_array($_SESSION['user']['role'], ['admin', 'guru'])) {
-    header("Location: ../../auth/login.php");
+$currentUser = admin_require_auth(['admin', 'guru']);
+
+if (!admin_validate_csrf($_GET['token'] ?? null)) {
+    header('Location: laporan_absensi.php?status=error&message=' . urlencode('Token tidak valid.'));
     exit;
 }
-
-require '../../assets/vendor/fpdf/fpdf.php';
 
 // Filter parameters
 $tanggal_mulai = isset($_GET['tanggal_mulai']) ? $_GET['tanggal_mulai'] : date('Y-m-01');

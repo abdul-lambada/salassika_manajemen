@@ -1,71 +1,48 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user'])) {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-if (strtolower($_SESSION['user']['role'] ?? '') !== 'admin') {
-    header('Location: ../../auth/login.php');
-    exit;
-}
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin']);
+
 $title = "List Jurusan";
 $active_page = "list_jurusan"; // Untuk menandai menu aktif di sidebar
 $required_role = 'admin';
-include '../../templates/layout_start.php';
-// Pagination: retrieve current page and set limit
+$csrfToken = admin_get_csrf_token();
+
+// Pagination
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+if ($page < 1) {
+    $page = 1;
+}
 $limit = 10;
 $offset = ($page - 1) * $limit;
+
 // Ambil data Jurusan dengan pagination
-include '../../includes/db.php';
-$stmt = $conn->query("SELECT SQL_CALC_FOUND_ROWS * FROM jurusan LIMIT $limit OFFSET $offset");
+$stmt = $conn->prepare("SELECT * FROM jurusan LIMIT :limit OFFSET :offset");
+$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
 $jurusan_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
-// Get total number of rows and compute total pages
-$total = $conn->query("SELECT FOUND_ROWS()")->fetchColumn();
-$totalPages = ceil($total / $limit);
-// Cek status dari query string
-$status = isset($_GET['status']) ? $_GET['status'] : '';
-$message = '';
-switch ($status) {
-    case 'add_success':
-        $message = 'Data jurusan berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-        break;
-    case 'edit_success':
-        $message = 'Data jurusan berhasil diperbarui.';
-        $alert_class = 'alert-warning';
-        break;
-    case 'delete_success':
-        $message = 'Data jurusan berhasil dihapus.';
-        $alert_class = 'alert-danger';
-        break;
-    case 'error':
-        $message = isset($_GET['message']) ? $_GET['message'] : 'Terjadi kesalahan saat memproses data.';
-        $alert_class = 'alert-danger';
-        break;
-    default:
-        $message = '';
-        $alert_class = '';
-        break;
-}
+
+// Total data
+$total = (int)$conn->query("SELECT COUNT(*) FROM jurusan")->fetchColumn();
+$totalPages = max(1, (int)ceil($total / $limit));
+
+$statusMap = [
+    'add_success' => ['message' => 'Data jurusan berhasil ditambahkan.', 'class' => 'alert-success'],
+    'edit_success' => ['message' => 'Data jurusan berhasil diperbarui.', 'class' => 'alert-warning'],
+    'delete_success' => ['message' => 'Data jurusan berhasil dihapus.', 'class' => 'alert-danger'],
+    'error' => ['message' => admin_request_param('message', 'Terjadi kesalahan saat memproses data.'), 'class' => 'alert-danger'],
+];
+
+$alert = admin_build_alert($statusMap);
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
         <div class="container-fluid">
-            <!-- <h1 class="h3 mb-4 text-gray-800">List Jurusan</h1> -->
-            <!-- Begin Alert SB Admin 2 -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display'] ?? false): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
-            <!-- End Alert SB Admin 2 -->
             <div class="row">
                 <div class="col-lg-12">
                     <div class="card shadow mb-4">
@@ -125,44 +102,32 @@ switch ($status) {
                             <!-- Dynamic Pagination -->
                             <nav aria-label="Page navigation example">
                                 <ul class="pagination justify-content-end">
-                                    <?php if($page > 1): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page-1; ?>">Previous</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Previous</span>
-                                        </li>
-                                    <?php endif; ?>
-                                    <?php for($i=1; $i <= $totalPages; $i++): ?>
-                                        <li class="page-item <?php if($page==$i) echo 'active'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    <li class="page-item <?= $page > 1 ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= max(1, $page - 1) ?>">Previous</a>
+                                    </li>
+                                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                        <li class="page-item <?= $page === $i ? 'active' : '' ?>">
+                                            <a class="page-link" href="?page=<?= $i ?>"><?= $i ?></a>
                                         </li>
                                     <?php endfor; ?>
-                                    <?php if($page < $totalPages): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page+1; ?>">Next</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Next</span>
-                                        </li>
-                                    <?php endif; ?>
+                                    <li class="page-item <?= $page < $totalPages ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= min($totalPages, $page + 1) ?>">Next</a>
+                                    </li>
                                 </ul>
                             </nav>
-                    </div>
                 </div>
             </div>
         </div>
-    </div>
 <?php include '../../templates/layout_end.php'; ?>
 <script>
     $(document).ready(function() {
         var namaJurusanHapus = $('#namaJurusanHapus');
         var btnHapusJurusan = $('#btnHapusJurusan');
+        var csrfToken = '<?= htmlspecialchars($csrfToken); ?>';
         $('.btn-hapus-jurusan').on('click', function() {
             var id = $(this).data('id');
-            var link = 'hapus_jurusan.php?id=' + encodeURIComponent(id);
+            var nama = $(this).data('nama');
+            var link = 'hapus_jurusan.php?id=' + encodeURIComponent(id) + '&token=' + encodeURIComponent(csrfToken);
             namaJurusanHapus.text(nama);
             btnHapusJurusan.attr('href', link);
         });

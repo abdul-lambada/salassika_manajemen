@@ -1,47 +1,48 @@
 <?php
-session_start();
-$title = "404 Not Found";
-$active_page = "404";
-
-// Tentukan dashboard berdasarkan role
-$BASE = defined('APP_URL') ? APP_URL : '';
-$dashboard_url = $BASE . '/';
-if (isset($_SESSION['user']['role'])) {
-    if ($_SESSION['user']['role'] === 'admin') {
-        $dashboard_url = $BASE . '/admin/index.php';
-    } elseif ($_SESSION['user']['role'] === 'guru') {
-        $dashboard_url = $BASE . '/guru/index.php';
+if (!function_exists('template_url')) {
+    function template_url(string $path = ''): string
+    {
+        $base = defined('APP_URL') ? rtrim(APP_URL, '/') : rtrim(admin_app_url(''), '/');
+        $trimmed = ltrim($path, '/');
+        return $base . ($trimmed !== '' ? '/' . $trimmed : '');
     }
 }
 
-include __DIR__ . '/header.php';
-include __DIR__ . '/sidebar.php';
+if (!isset($currentUser) || !is_array($currentUser)) {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    $currentUser = $GLOBALS['currentUser'] ?? ($_SESSION['user'] ?? []);
+}
+
+$role = strtolower($currentUser['role'] ?? '');
+if ($role === 'admin') {
+    $dashboardUrl = template_url('admin/index.php');
+} elseif ($role === 'guru') {
+    $dashboardUrl = template_url('guru/index.php');
+} else {
+    $dashboardUrl = template_url('index.php');
+}
 ?>
 
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include __DIR__ . '/navbar.php'; ?>
-        <div class="container-fluid">
-            <div class="row justify-content-center">
-                <div class="col-lg-6 text-center">
-                    <div class="error-page">
-                        <h1 class="display-1 text-primary font-weight-bold">404</h1>
-                        <h2 class="mb-4 text-gray-800">Halaman tidak ditemukan</h2>
-                        <p class="lead mb-4 text-gray-600">
-                            Maaf, halaman yang Anda cari tidak tersedia atau sudah dipindahkan.
-                        </p>
-                        <div class="mb-4">
-                            <i class="fas fa-search fa-3x text-gray-300"></i>
-                        </div>
-                        <a href="<?= $dashboard_url ?>" class="btn btn-primary btn-lg">
-                            <i class="fas fa-home"></i> Kembali ke Beranda
-                        </a>
-                    </div>
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 text-center">
+            <div class="error-page">
+                <h1 class="display-1 text-primary font-weight-bold">404</h1>
+                <h2 class="mb-4 text-gray-800">Halaman tidak ditemukan</h2>
+                <p class="lead mb-4 text-gray-600">
+                    Maaf, halaman yang Anda cari tidak tersedia atau sudah dipindahkan.
+                </p>
+                <div class="mb-4">
+                    <i class="fas fa-search fa-3x text-gray-300"></i>
                 </div>
+                <a href="<?= htmlspecialchars($dashboardUrl, ENT_QUOTES, 'UTF-8'); ?>" class="btn btn-primary btn-lg">
+                    <i class="fas fa-home"></i> Kembali ke Beranda
+                </a>
             </div>
         </div>
     </div>
-    <?php include __DIR__ . '/footer.php'; ?>
 </div>
 
 <style>
@@ -69,8 +70,3 @@ include __DIR__ . '/sidebar.php';
     font-size: 1.1rem;
 }
 </style>
-
-<?php include __DIR__ . '/scripts.php'; ?>
-
-</body>
-</html> 

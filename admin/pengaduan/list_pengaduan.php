@@ -1,89 +1,65 @@
 <?php
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['user']['role'] !== 'admin') {
-    header("Location: ../../auth/login.php");
-    exit;
-}
-$title = "List Pengaduan";
-$active_page = "list_pengaduan"; // Untuk menandai menu aktif di sidebar
-include '../../templates/header.php';
-include '../../templates/sidebar.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
 
-// Pagination: retrieve current page and set limit
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 10; // Jumlah data per halaman
+$currentUser = admin_require_auth(['admin']);
+
+$title = 'List Pengaduan';
+$active_page = 'list_pengaduan';  // Untuk menandai menu aktif di sidebar
+$required_role = 'admin';
+$csrfToken = admin_get_csrf_token();
+
+$page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+$limit = 10;
 $offset = ($page - 1) * $limit;
 
-// Ambil data Pengaduan dengan pagination
-include '../../includes/db.php';
-
-// Handle update status via POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id_pengaduan'])) {
-    $id_pengaduan = (int)$_POST['id_pengaduan'];
-    $status = $_POST['status'];
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        header('Location: list_pengaduan.php?status=error&message=' . urlencode('Token CSRF tidak valid.'));
+        exit;
+    }
+
+    $id_pengaduan = (int) $_POST['id_pengaduan'];
+    $statusPengaduan = $_POST['status'] ?? 'pending';
 
     try {
-        $stmt = $conn->prepare("UPDATE pengaduan SET status = :status WHERE id_pengaduan = :id_pengaduan");
-        $stmt->bindParam(':status', $status);
-        $stmt->bindParam(':id_pengaduan', $id_pengaduan);
-        $stmt->execute();
-        header("Location: list_pengaduan.php?status=update_success");
+        $stmtUpdate = $conn->prepare('UPDATE pengaduan SET status = :status WHERE id_pengaduan = :id_pengaduan');
+        $stmtUpdate->bindParam(':status', $statusPengaduan, PDO::PARAM_STR);
+        $stmtUpdate->bindParam(':id_pengaduan', $id_pengaduan, PDO::PARAM_INT);
+        $stmtUpdate->execute();
+        header('Location: list_pengaduan.php?status=update_success');
         exit;
-    } catch (\PDOException $e) {
-        header("Location: list_pengaduan.php?status=error");
+    } catch (PDOException $e) {
+        header('Location: list_pengaduan.php?status=error');
         exit;
     }
 }
 
-$stmt = $conn->query("SELECT SQL_CALC_FOUND_ROWS * FROM pengaduan ORDER BY tanggal_pengaduan DESC LIMIT $limit OFFSET $offset");
+$stmt = $conn->prepare('SELECT * FROM pengaduan ORDER BY tanggal_pengaduan DESC LIMIT :limit OFFSET :offset');
+$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
 $pengaduan_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get total number of rows and compute total pages
-$total = $conn->query("SELECT FOUND_ROWS()")->fetchColumn();
-$totalPages = ceil($total / $limit);
+$total = (int) $conn->query('SELECT COUNT(*) FROM pengaduan')->fetchColumn();
+$totalPages = max(1, (int) ceil($total / $limit));
 
-// Cek status dari query string
-$status = isset($_GET['status']) ? $_GET['status'] : '';
-$message = '';
-switch ($status) {
-    case 'add_success':
-        $message = 'Data pengaduan berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-        break;
-    case 'update_success':
-        $message = 'Status pengaduan berhasil diperbarui.';
-        $alert_class = 'alert-warning';
-        break;
-    case 'delete_success':
-        $message = 'Data pengaduan berhasil dihapus.';
-        $alert_class = 'alert-danger';
-        break;
-    case 'error':
-        $message = 'Terjadi kesalahan saat memproses data.';
-        $alert_class = 'alert-danger';
-        break;
-    default:
-        $message = '';
-        $alert_class = '';
-        break;
-}
+$statusMap = [
+    'add_success' => ['message' => 'Data pengaduan berhasil ditambahkan.', 'class' => 'alert-success'],
+    'update_success' => ['message' => 'Status pengaduan berhasil diperbarui.', 'class' => 'alert-warning'],
+    'delete_success' => ['message' => 'Data pengaduan berhasil dihapus.', 'class' => 'alert-danger'],
+    'error' => ['message' => admin_request_param('message', 'Terjadi kesalahan saat memproses data.'), 'class' => 'alert-danger'],
+];
+
+$alert = admin_build_alert($statusMap);
+
+include '../../templates/layout_start.php';
 ?>
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
 
-        <!-- Begin Page Content -->
         <div class="container-fluid">
-            <!-- Begin Alert SB Admin 2 -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display'] ?? false): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
-            <!-- End Alert SB Admin 2 -->
 
             <div class="row">
                 <div class="col-lg-12">
@@ -145,6 +121,7 @@ switch ($status) {
                                             </td>
                                             <td>
                                                 <form method="POST" action="" style="display: inline;">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                                                     <input type="hidden" name="id_pengaduan" value="<?php echo $pengaduan['id_pengaduan']; ?>">
                                                     <select name="status" class="form-control form-control-sm" onchange="this.form.submit()">
                                                         <option value="pending" <?php echo $pengaduan['status'] === 'pending' ? 'selected' : ''; ?>>Pending</option>
@@ -174,7 +151,7 @@ switch ($status) {
                                                     <div class="modal-body">Apakah Anda yakin akan menghapus data ini?</div>
                                                     <div class="modal-footer">
                                                         <button class="btn btn-secondary" type="button" data-dismiss="modal">Batal</button>
-                                                        <a class="btn btn-danger" href="hapus_pengaduan.php?id=<?php echo $pengaduan['id_pengaduan']; ?>">Hapus</a>
+                                                        <a class="btn btn-danger" href="hapus_pengaduan.php?id=<?php echo $pengaduan['id_pengaduan']; ?>&token=<?= urlencode($csrfToken); ?>">Hapus</a>
                                                     </div>
                                                 </div>
                                             </div>
@@ -186,31 +163,17 @@ switch ($status) {
                             <!-- Dynamic Pagination -->
                             <nav aria-label="Page navigation example">
                                 <ul class="pagination justify-content-end">
-                                    <?php if ($page > 1): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page - 1; ?>">Previous</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Previous</span>
-                                        </li>
-                                    <?php endif; ?>
-
+                                    <li class="page-item <?= $page > 1 ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= max(1, $page - 1) ?>">Previous</a>
+                                    </li>
                                     <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                        <li class="page-item <?php if ($page == $i) echo 'active'; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                        <li class="page-item <?= $page === $i ? 'active' : '' ?>">
+                                            <a class="page-link" href="?page=<?= $i ?>"><?= $i ?></a>
                                         </li>
                                     <?php endfor; ?>
-
-                                    <?php if ($page < $totalPages): ?>
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page=<?php echo $page + 1; ?>">Next</a>
-                                        </li>
-                                    <?php else: ?>
-                                        <li class="page-item disabled">
-                                            <span class="page-link">Next</span>
-                                        </li>
-                                    <?php endif; ?>
+                                    <li class="page-item <?= $page < $totalPages ? '' : 'disabled' ?>">
+                                        <a class="page-link" href="?page=<?= min($totalPages, $page + 1) ?>">Next</a>
+                                    </li>
                                 </ul>
                             </nav>
                         </div>
@@ -218,6 +181,4 @@ switch ($status) {
                 </div>
             </div>
         </div>
-    </div>
-    <?php include '../../templates/footer.php'; ?>
-</div>
+<?php include '../../templates/layout_end.php'; ?>

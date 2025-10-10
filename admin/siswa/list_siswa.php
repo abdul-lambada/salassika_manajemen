@@ -1,17 +1,15 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user'])) {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-if (strtolower($_SESSION['user']['role'] ?? '') !== 'admin') {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin']);
+$csrfToken = admin_get_csrf_token();
+
 if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
+    if (!admin_validate_csrf($_POST['csrf_token'] ?? null)) {
+        header('Location: list_siswa.php?status=error&msg=' . urlencode('Token CSRF tidak valid.'));
+        exit;
+    }
     require_once '../../vendor/autoload.php';
     require_once '../../vendor/phpoffice/phpexcel/Classes/PHPExcel/IOFactory.php';
     $file = $_FILES['excel_file']['tmp_name'];
@@ -60,7 +58,7 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 $title = "List Siswa";
 $active_page = "list_siswa";
 $required_role = 'admin';
-include '../../templates/layout_start.php';
+$deleteToken = $csrfToken;
 
 // Konfigurasi pagination
 $limit = 10;
@@ -99,53 +97,26 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $siswa_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Handling status message
-$status = isset($_GET['status']) ? $_GET['status'] : '';
-$message = '';
-$alert_class = '';
+$statusMap = [
+    'add_success' => ['message' => 'Data siswa berhasil ditambahkan.', 'class' => 'alert-success'],
+    'edit_success' => ['message' => 'Data siswa berhasil diperbarui.', 'class' => 'alert-warning'],
+    'delete_success' => ['message' => 'Data siswa berhasil dihapus.', 'class' => 'alert-danger'],
+    'import_success' => ['message' => 'Import data siswa berhasil diproses.', 'class' => 'alert-success'],
+    'import_warning' => ['message' => 'Import selesai dengan beberapa peringatan.', 'class' => 'alert-warning'],
+    'error' => ['message' => 'Terjadi kesalahan saat memproses data.', 'class' => 'alert-danger'],
+];
 
-switch ($status) {
-    case 'add_success':
-        $message = 'Data siswa berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-        break;
-    case 'edit_success':
-        $message = 'Data siswa berhasil diperbarui.';
-        $alert_class = 'alert-warning';
-        break;
-    case 'delete_success':
-        $message = 'Data siswa berhasil dihapus.';
-        $alert_class = 'alert-danger';
-        break;
-    case 'error':
-        $message = 'Terjadi kesalahan saat memproses data.';
-        $alert_class = 'alert-danger';
-        break;
-}
+$alert = admin_build_alert($statusMap);
 
-// Tampilkan pesan dari GET jika ada
-if (isset($_GET['msg'])) {
-    $message = $_GET['msg'];
-    $alert_class = (isset($_GET['status']) && $_GET['status'] === 'import_warning') ? 'alert-warning' : 'alert-success';
-}
+include '../../templates/layout_start.php';
 ?>
-
-<div id="content-wrapper" class="d-flex flex-column">
-    <div id="content">
-        <?php include '../../templates/navbar.php'; ?>
-        
         <div class="container-fluid">
             <!-- Page Heading -->
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <!-- <h1 class="h3 mb-0 text-gray-800">List Siswa</h1> -->
             </div>
-            <?php if (!empty($message)): ?>
-                <div class="alert <?= $alert_class ?> alert-dismissible fade show" role="alert">
-                    <?= $message ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display'] ?? false): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
 
             <div class="card shadow mb-4">
@@ -156,6 +127,7 @@ if (isset($_GET['msg'])) {
                             <i class="fas fa-plus-circle"></i> Tambah Siswa
                         </a>
                         <form method="POST" action="" enctype="multipart/form-data" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken); ?>">
                             <input type="file" name="excel_file" accept=".xlsx, .xls" required>
                             <button type="submit" name="import_excel" class="btn btn-primary btn-sm">
                                 <i class="fas fa-file-import"></i> Import Excel
@@ -224,7 +196,7 @@ if (isset($_GET['msg'])) {
                                                 <button type="button" class="btn btn-secondary" data-dismiss="modal">
                                                     Batal
                                                 </button>
-                                                <a href="hapus_siswa.php?id=<?= $siswa['id_siswa'] ?>" 
+                                                <a href="hapus_siswa.php?id=<?= $siswa['id_siswa'] ?>&token=<?= urlencode($deleteToken) ?>" 
                                                    class="btn btn-danger">
                                                     Hapus
                                                 </a>
@@ -256,5 +228,5 @@ if (isset($_GET['msg'])) {
             </div>
         </div>
     </div>
-    
-    <?php include '../../templates/layout_end.php'; ?>
+</div>
+<?php include '../../templates/layout_end.php'; ?>

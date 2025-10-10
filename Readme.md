@@ -68,6 +68,11 @@ define('FINGERPRINT_PORT', 4370);
 2. Tambah pengguna baru dari data siswa/guru
 3. Sinkronisasi pengguna dengan perangkat
 
+### 4. Keamanan CSRF (Admin Panel)
+- Semua form dan aksi hapus di panel admin kini menggunakan token CSRF yang dikelola oleh helper `admin_get_csrf_token()` dan `admin_validate_csrf()`.
+- Pastikan tautan hapus menyertakan parameter `token` dari sesi saat ini; contoh: `hapus_jurusan.php?id=123&token=<csrf>`.
+- Helper tambahan tersedia di `includes/admin_helpers.php` seperti `admin_fetch_fingerprint_users()` untuk mengambil UID fingerprint secara aman.
+
 ### 4. Monitoring Absensi
 1. Menu: **Absensi > Log Absensi**
 2. Lihat data absensi real-time

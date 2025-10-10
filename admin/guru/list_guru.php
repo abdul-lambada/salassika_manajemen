@@ -1,12 +1,8 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-if (!isset($_SESSION['user'])) {
-    header('Location: ../../auth/login.php');
-    exit;
-}
-include '../../includes/db.php';
+require_once __DIR__ . '/../../includes/admin_bootstrap.php';
+require_once __DIR__ . '/../../includes/admin_helpers.php';
+
+$currentUser = admin_require_auth(['admin']);
 if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
     require_once '../../vendor/autoload.php';
     require_once '../../vendor/phpoffice/phpexcel/Classes/PHPExcel/IOFactory.php';
@@ -48,11 +44,21 @@ if (isset($_POST['import_excel']) && isset($_FILES['excel_file'])) {
     header("Location: list_guru.php?status=$status&msg=" . urlencode($msg));
     exit();
 }
-use PhpOffice\PhpSpreadsheet\IOFactory;
 $title = "List Guru";
 $active_page = "list_guru"; // Untuk menandai menu aktif di sidebar
 $required_role = 'admin';
 include '../../templates/layout_start.php';
+
+$statusMap = [
+    'add_success' => ['message' => 'Data guru berhasil ditambahkan.', 'class' => 'alert-success'],
+    'edit_success' => ['message' => 'Data guru berhasil diperbarui.', 'class' => 'alert-warning'],
+    'delete_success' => ['message' => 'Data guru berhasil dihapus.', 'class' => 'alert-danger'],
+    'import_success' => ['message' => 'Import data guru berhasil diproses.', 'class' => 'alert-success'],
+    'import_warning' => ['message' => 'Import selesai dengan beberapa peringatan.', 'class' => 'alert-warning'],
+    'error' => ['message' => 'Terjadi kesalahan saat memproses data.', 'class' => 'alert-danger'],
+];
+
+$alert = admin_build_alert($statusMap);
 
 // Pagination
 $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -80,46 +86,11 @@ $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
 $guru_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Cek status dari query string
-$status = isset($_GET['status']) ? $_GET['status'] : '';
-$message = '';
-switch ($status) {
-    case 'add_success':
-        $message = 'Data guru berhasil ditambahkan.';
-        $alert_class = 'alert-success';
-        break;
-    case 'edit_success':
-        $message = 'Data guru berhasil diperbarui.';
-        $alert_class = 'alert-warning';
-        break;
-    case 'delete_success':
-        $message = 'Data guru berhasil dihapus.';
-        $alert_class = 'alert-danger';
-        break;
-    case 'error':
-        $message = 'Terjadi kesalahan saat memproses data.';
-        $alert_class = 'alert-danger';
-        break;
-    default:
-        $message = '';
-        $alert_class = '';
-        break;
-}
-// Tampilkan pesan dari GET jika ada
-if (isset($_GET['msg'])) {
-    $message = $_GET['msg'];
-    $alert_class = (isset($_GET['status']) && $_GET['status'] === 'import_warning') ? 'alert-warning' : 'alert-success';
-}
 ?>
         <div class="container-fluid">
             <!-- <h1 class="h3 mb-4 text-gray-800">List Guru</h1> -->
-            <?php if (!empty($message)): ?>
-                <div class="alert <?php echo $alert_class; ?> alert-dismissible fade show" role="alert">
-                    <?php echo $message; ?>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
+            <?php if ($alert['should_display'] ?? false): ?>
+                <?= admin_render_alert($alert); ?>
             <?php endif; ?>
             <div class="row">
                 <div class="col-lg-12">

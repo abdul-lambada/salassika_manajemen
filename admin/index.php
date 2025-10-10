@@ -1,20 +1,14 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-// Load config and production settings
-if (file_exists(__DIR__ . '/../includes/config.php')) {
-    include __DIR__ . '/../includes/config.php';
-}
-if (file_exists(__DIR__ . '/../config/production.php')) {
-    include __DIR__ . '/../config/production.php';
-}
-include __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/admin_bootstrap.php';
+
+$currentUser = admin_require_auth(['admin', 'guru']);
+$role = strtolower($currentUser['role'] ?? '');
+
 $title = "Dashboard Admin";
 $active_page = "dashboard";
 $required_role = null; // allow admin & guru
+
 include __DIR__ . '/../templates/layout_start.php';
-$role = strtolower($_SESSION['user']['role'] ?? '');
 
 // Monitoring status sinkronisasi fingerprint
 $log_file = __DIR__ . '/../logs/cron_sync.log';
@@ -119,7 +113,7 @@ if (file_exists($log_file)) {
                                             Absensi Hari Ini</div>
                                         <?php
                                         $today = date('Y-m-d');
-                                        $user_id = $_SESSION['user']['id'];
+                                        $user_id = $currentUser['id'];
                                         $stmt = $conn->prepare("SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today AND user_id = :user_id");
                                         $stmt->bindParam(':today', $today);
                                         $stmt->bindParam(':user_id', $user_id);
@@ -201,7 +195,7 @@ if (file_exists($log_file)) {
                     <div class="card shadow mb-4">
                         <div class="card-header py-3">
                             <h6 class="m-0 font-weight-bold text-primary">
-                                Selamat Datang, <?= htmlspecialchars($_SESSION['user']['name']) ?>!
+                                Selamat Datang, <?= htmlspecialchars($currentUser['name'] ?? '') ?>!
                             </h6>
                         </div>
                         <div class="card-body">
