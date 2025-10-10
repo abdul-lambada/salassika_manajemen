@@ -4,9 +4,9 @@ require_once __DIR__ . '/../includes/admin_bootstrap.php';
 $currentUser = admin_require_auth(['admin', 'guru']);
 $role = strtolower($currentUser['role'] ?? '');
 
-$title = "Dashboard Admin";
-$active_page = "dashboard";
-$required_role = null; // allow admin & guru
+$title = 'Dashboard Admin';
+$active_page = 'dashboard';
+$required_role = null;  // allow admin & guru
 
 include __DIR__ . '/../templates/layout_start.php';
 
@@ -51,18 +51,24 @@ if (file_exists($log_file)) {
                     <!-- Admin Dashboard Content -->
                     <div class="col-xl-3 col-md-6 mb-4">
                         <?php
-                        $stmt = $conn->query("SELECT COUNT(*) as total FROM guru");
+                        $stmt = $conn->query('SELECT COUNT(*) as total FROM guru');
                         $guru_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-                        $border='primary'; $icon='fas fa-chalkboard-teacher'; $title_text='Total Guru'; $value_html=$guru_count;
+                        $border = 'primary';
+                        $icon = 'fas fa-chalkboard-teacher';
+                        $title_text = 'Total Guru';
+                        $value_html = $guru_count;
                         include __DIR__ . '/../templates/components/card_stat.php';
                         ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
                         <?php
-                        $stmt = $conn->query("SELECT COUNT(*) as total FROM siswa");
+                        $stmt = $conn->query('SELECT COUNT(*) as total FROM siswa');
                         $siswa_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
-                        $border='success'; $icon='fas fa-users'; $title_text='Total Siswa'; $value_html=$siswa_count;
+                        $border = 'success';
+                        $icon = 'fas fa-users';
+                        $title_text = 'Total Siswa';
+                        $value_html = $siswa_count;
                         include __DIR__ . '/../templates/components/card_stat.php';
                         ?>
                     </div>
@@ -70,34 +76,42 @@ if (file_exists($log_file)) {
                     <div class="col-xl-3 col-md-6 mb-4">
                         <?php
                         $today = date('Y-m-d');
-                        $stmt_guru = $conn->prepare("SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today");
+                        $stmt_guru = $conn->prepare('SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today');
                         $stmt_guru->bindParam(':today', $today);
                         $stmt_guru->execute();
                         $absensi_guru_today = $stmt_guru->fetch(PDO::FETCH_ASSOC)['total'];
-                        $stmt_siswa = $conn->prepare("SELECT COUNT(*) as total FROM absensi_siswa WHERE DATE(tanggal) = :today");
+                        $stmt_siswa = $conn->prepare('SELECT COUNT(*) as total FROM absensi_siswa WHERE DATE(tanggal) = :today');
                         $stmt_siswa->bindParam(':today', $today);
                         $stmt_siswa->execute();
                         $absensi_siswa_today = $stmt_siswa->fetch(PDO::FETCH_ASSOC)['total'];
                         $absensi_today = $absensi_guru_today + $absensi_siswa_today;
-                        $border='info'; $icon='fas fa-clipboard-list'; $title_text='Absensi Hari Ini'; $value_html=$absensi_today;
+                        $border = 'info';
+                        $icon = 'fas fa-clipboard-list';
+                        $title_text = 'Absensi Hari Ini';
+                        $value_html = $absensi_today;
                         include __DIR__ . '/../templates/components/card_stat.php';
                         ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
                         <?php
-                        $border='warning'; $icon='fas fa-fingerprint'; $title_text='Device Fingerprint'; $value_html='Online';
+                        $border = 'warning';
+                        $icon = 'fas fa-fingerprint';
+                        $title_text = 'Device Fingerprint';
+                        $value_html = 'Online';
                         include __DIR__ . '/../templates/components/card_stat.php';
                         ?>
                     </div>
 
                     <div class="col-xl-3 col-md-6 mb-4">
                         <?php
-                        $border='info'; $icon='fas fa-sync-alt'; $title_text='Status Sinkronisasi Fingerprint';
+                        $border = 'info';
+                        $icon = 'fas fa-sync-alt';
+                        $title_text = 'Status Sinkronisasi Fingerprint';
                         $badgeClass = strtolower($last_sync_status) === 'success' ? 'success' : (strtolower($last_sync_status) === 'error' ? 'danger' : 'secondary');
-                        $value_html = '<div class="h6 mb-0 font-weight-bold text-gray-800">Terakhir: '.htmlspecialchars($last_sync_time).'</div>'
-                            .'<div class="small mb-0">Status: <span class="badge badge-'.$badgeClass.'">'.htmlspecialchars($last_sync_status).'</span></div>'
-                            .'<div class="small text-muted">Pesan: '.htmlspecialchars($last_sync_msg).'</div>';
+                        $value_html = '<div class="h6 mb-0 font-weight-bold text-gray-800">Terakhir: ' . htmlspecialchars($last_sync_time) . '</div>'
+                            . '<div class="small mb-0">Status: <span class="badge badge-' . $badgeClass . '">' . htmlspecialchars($last_sync_status) . '</span></div>'
+                            . '<div class="small text-muted">Pesan: ' . htmlspecialchars($last_sync_msg) . '</div>';
                         include __DIR__ . '/../templates/components/card_stat.php';
                         ?>
                     </div>
@@ -114,7 +128,7 @@ if (file_exists($log_file)) {
                                         <?php
                                         $today = date('Y-m-d');
                                         $user_id = $currentUser['id'];
-                                        $stmt = $conn->prepare("SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today AND user_id = :user_id");
+                                        $stmt = $conn->prepare('SELECT COUNT(*) as total FROM absensi_guru WHERE DATE(tanggal) = :today AND user_id = :user_id');
                                         $stmt->bindParam(':today', $today);
                                         $stmt->bindParam(':user_id', $user_id);
                                         $stmt->execute();
@@ -138,7 +152,7 @@ if (file_exists($log_file)) {
                                         <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                                             Total Siswa</div>
                                         <?php
-                                        $stmt = $conn->query("SELECT COUNT(*) as total FROM siswa");
+                                        $stmt = $conn->query('SELECT COUNT(*) as total FROM siswa');
                                         $siswa_count = $stmt->fetch(PDO::FETCH_ASSOC)['total'];
                                         ?>
                                         <div class="h5 mb-0 font-weight-bold text-gray-800"><?= $siswa_count ?></div>
@@ -213,31 +227,33 @@ if (file_exists($log_file)) {
                 </div>
             </div>
             <?php
-if ($role === 'admin') {
-    $today = date('Y-m-d');
-    $stats = [
-        'Hadir' => 0,
-        'Telat' => 0,
-        'Izin' => 0,
-        'Sakit' => 0,
-        'Alfa' => 0
-    ];
-    // Guru
-    $stmt = $conn->prepare("SELECT status_kehadiran, COUNT(*) as total FROM absensi_guru WHERE tanggal = :today GROUP BY status_kehadiran");
-    $stmt->execute([':today' => $today]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $status = $row['status_kehadiran'];
-        if (isset($stats[$status])) $stats[$status] += $row['total'];
-    }
-    // Siswa
-    $stmt = $conn->prepare("SELECT status_kehadiran, COUNT(*) as total FROM absensi_siswa WHERE tanggal = :today GROUP BY status_kehadiran");
-    $stmt->execute([':today' => $today]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-        $status = $row['status_kehadiran'];
-        if (isset($stats[$status])) $stats[$status] += $row['total'];
-    }
-}
-?>
+            if ($role === 'admin') {
+                $today = date('Y-m-d');
+                $stats = [
+                    'Hadir' => 0,
+                    'Telat' => 0,
+                    'Izin' => 0,
+                    'Sakit' => 0,
+                    'Alfa' => 0
+                ];
+                // Guru
+                $stmt = $conn->prepare('SELECT status_kehadiran, COUNT(*) as total FROM absensi_guru WHERE tanggal = :today GROUP BY status_kehadiran');
+                $stmt->execute([':today' => $today]);
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    $status = $row['status_kehadiran'];
+                    if (isset($stats[$status]))
+                        $stats[$status] += $row['total'];
+                }
+                // Siswa
+                $stmt = $conn->prepare('SELECT status_kehadiran, COUNT(*) as total FROM absensi_siswa WHERE tanggal = :today GROUP BY status_kehadiran');
+                $stmt->execute([':today' => $today]);
+                foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                    $status = $row['status_kehadiran'];
+                    if (isset($stats[$status]))
+                        $stats[$status] += $row['total'];
+                }
+            }
+            ?>
 <?php if ($role === 'admin'): ?>
             <div class="row">
             <div class="col-12">
@@ -252,9 +268,9 @@ if ($role === 'admin') {
             </div>
             </div>
         </div>
+        <?php include __DIR__ . '/../templates/layout_end.php'; ?>
     </div>
     
-<?php include __DIR__ . '/../templates/layout_end.php'; ?>
 <script>
 var ctx = document.getElementById('absensiChart').getContext('2d');
 var absensiChart = new Chart(ctx, {
