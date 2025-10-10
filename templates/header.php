@@ -29,8 +29,16 @@ include_once __DIR__ . '/active_page.php';
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i" rel="stylesheet">
 
-    <!-- Font Awesome (CDN fallback if local not present) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" integrity="sha512-dymI6X1YQKqj4kNn7cFq8m1qVqf2u7oV3kVX0Qw3Yz5w2d2k4q5Q7lq7w7Zq9x1H1Jff7kYp4Qq3q5q2z5yLw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Font Awesome (CDN with local fallback) -->
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
+          integrity="sha512-dymI6X1YQKqj4kNn7cFq8m1qVqf2u7oV3kVX0Qw3Yz5w2d2k4q5Q7lq7w7Zq9x1H1Jff7kYp4Qq3q5q2z5yLw=="
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+          onerror="this.onerror=null;this.href='<?= htmlspecialchars(template_asset('assets/vendor/fontawesome-free/css/all.min.css'), ENT_QUOTES, 'UTF-8'); ?>';" />
+    <noscript>
+        <link rel="stylesheet" href="<?= htmlspecialchars(template_asset('assets/vendor/fontawesome-free/css/all.min.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    </noscript>
 
     <!-- Core Theme CSS (SB Admin 2) -->
     <link href="<?= htmlspecialchars(template_asset('assets/css/sb-admin-2.min.css'), ENT_QUOTES, 'UTF-8'); ?>" rel="stylesheet">
